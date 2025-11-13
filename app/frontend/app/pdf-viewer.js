@@ -3,7 +3,7 @@ import { View, StyleSheet, Dimensions, Text, TouchableOpacity, Linking, Alert, A
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { WebView } from "react-native-webview";
 import { Ionicons } from "@expo/vector-icons";
-import { API_URL } from "./utils/api";
+import { resolveAssetUrl } from "./utils/api";
 
 export default function PDFViewer() {
   const { file, pdfUrl, title } = useLocalSearchParams();
@@ -12,22 +12,9 @@ export default function PDFViewer() {
   const [error, setError] = useState(null);
 
   // Use pdfUrl if provided, otherwise use file
-  let url = pdfUrl || file;
-  
-  // Construct full URL if it's a relative path or contains localhost
-  if (url) {
-    if (url.startsWith('/uploads/')) {
-      url = `${API_URL}${url}`;
-    } else if (url.includes('localhost')) {
-      // Replace localhost with API_URL for existing questions
-      const pathMatch = url.match(/\/uploads\/.*$/);
-      if (pathMatch) {
-        url = `${API_URL}${pathMatch[0]}`;
-      } else {
-        url = url.replace(/http:\/\/localhost:5000/, API_URL);
-      }
-    }
-  }
+  const rawUrl = pdfUrl || file;
+  const resolvedUrl = resolveAssetUrl(rawUrl);
+  let url = resolvedUrl || rawUrl;
 
   console.log('PDF URL:', url);
 

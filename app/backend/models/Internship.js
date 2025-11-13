@@ -38,8 +38,16 @@ const internshipSchema = new mongoose.Schema({
     },
   },
   image: {
-    type: String,
-    default: null,
+    url: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    publicId: {
+      type: String,
+      trim: true,
+      default: null,
+    },
   },
   uploadedBy: {
     type: mongoose.Schema.Types.ObjectId,

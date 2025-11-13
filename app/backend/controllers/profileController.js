@@ -1,9 +1,20 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
-const path = require('path');
-const fs = require('fs');
 const Question = require('../models/Question');
 const Solution = require('../models/Solution');
+const { uploadBuffer, deleteResource } = require('../utils/cloudinary');
+
+const formatUserResponse = (user) => ({
+  id: user._id,
+  name: user.name,
+  email: user.email,
+  school: user.school,
+  department: user.department,
+  level: user.level,
+  role: user.role,
+  profilePicture: user.profilePicture,
+  createdAt: user.createdAt,
+});
 
 // Get user profile
 exports.getProfile = async (req, res) => {
@@ -18,17 +29,7 @@ exports.getProfile = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        school: user.school,
-        department: user.department,
-        level: user.level,
-        role: user.role,
-        profilePicture: user.profilePicture,
-        createdAt: user.createdAt,
-      },
+      user: formatUserResponse(user),
     });
   } catch (error) {
     console.error('Get profile error:', error);
@@ -60,16 +61,16 @@ exports.updateProfile = async (req, res) => {
     if (department !== undefined) user.department = department;
     if (level !== undefined) user.level = level;
 
-    // Handle profile picture upload
     if (req.file) {
-      // Delete old profile picture if exists
-      if (user.profilePicture) {
-        const oldImagePath = path.join(__dirname, '..', user.profilePicture);
-        if (fs.existsSync(oldImagePath)) {
-          fs.unlinkSync(oldImagePath);
-        }
+      if (user.profilePicturePublicId) {
+        await deleteResource(user.profilePicturePublicId, 'image');
       }
-      user.profilePicture = `/uploads/${req.file.filename}`;
+      const upload = await uploadBuffer(req.file.buffer, {
+        folder: 'profiles',
+        resource_type: 'image',
+      });
+      user.profilePicture = upload.secure_url;
+      user.profilePicturePublicId = upload.public_id;
     }
 
     await user.save();
@@ -77,17 +78,7 @@ exports.updateProfile = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        school: user.school,
-        department: user.department,
-        level: user.level,
-        role: user.role,
-        profilePicture: user.profilePicture,
-        createdAt: user.createdAt,
-      },
+      user: formatUserResponse(user),
     });
   } catch (error) {
     console.error('Update profile error:', error);

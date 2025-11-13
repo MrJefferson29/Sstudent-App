@@ -27,10 +27,19 @@ const scholarshipSchema = new mongoose.Schema({
       message: 'Please provide a valid URL',
     },
   },
-  images: {
-    type: [String],
-    default: [],
-  },
+  images: [
+    {
+      url: {
+        type: String,
+        required: [true, 'Image URL is required'],
+        trim: true,
+      },
+      publicId: {
+        type: String,
+        trim: true,
+      },
+    },
+  ],
   uploadedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

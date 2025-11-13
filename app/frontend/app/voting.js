@@ -9,7 +9,7 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { contestsAPI, votesAPI, API_URL } from "./utils/api";
+import { contestsAPI, votesAPI, resolveAssetUrl } from "./utils/api";
 import { LinearGradient } from "expo-linear-gradient";
 
 export default function VotingScreen() {
@@ -160,7 +160,7 @@ export default function VotingScreen() {
                 <Image
                   source={{
                     uri:
-                      c.image ||
+                      resolveAssetUrl(c.image) ||
                       "https://cdn-icons-png.flaticon.com/512/149/149071.png",
                   }}
                   style={styles.image}

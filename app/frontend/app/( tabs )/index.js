@@ -12,7 +12,7 @@ import {
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { AuthContext } from "../Contexts/AuthContext";
-import { API_URL } from "../utils/api";
+import { resolveAssetUrl } from "../utils/api";
 
 const { width } = Dimensions.get('window');
 const SPACING = 20;
@@ -25,9 +25,9 @@ export default function HomeScreen() {
   const { user } = useContext(AuthContext);
 
   // Fallback URL for better professionalism
-  const profileImageUri = user?.profilePicture
-    ? `${API_URL}${user.profilePicture}`
-    : `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || "User")}&background=1E3A8A&color=fff&size=128`; // Darker blue background
+  const profileImageUri =
+    resolveAssetUrl(user?.profilePicture) ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || "User")}&background=1E3A8A&color=fff&size=128`; // Darker blue background
 
   return (
     <View style={professionalStyles.container}>

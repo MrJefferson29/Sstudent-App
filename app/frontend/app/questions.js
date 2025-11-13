@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { questionsAPI, API_URL } from "./utils/api";
+import { questionsAPI, resolveAssetUrl } from "./utils/api";
 
 export default function PastQuestions() {
   const { school, dept, level, subject } = useLocalSearchParams();
@@ -88,22 +88,7 @@ export default function PastQuestions() {
   // Open PDF link in device browser or PDF viewer app
   const openPDF = async (url) => {
     try {
-      // Construct full URL if it's a relative path or contains localhost
-      let fullUrl = url;
-      if (url && (url.startsWith('/uploads/') || url.includes('localhost'))) {
-        // Replace localhost with API_URL, or prepend API_URL for relative paths
-        if (url.includes('localhost')) {
-          // Extract just the path part after localhost:5000
-          const pathMatch = url.match(/\/uploads\/.*$/);
-          if (pathMatch) {
-            fullUrl = `${API_URL}${pathMatch[0]}`;
-          } else {
-            fullUrl = url.replace(/http:\/\/localhost:5000/, API_URL);
-          }
-        } else {
-          fullUrl = `${API_URL}${url}`;
-        }
-      }
+      const fullUrl = resolveAssetUrl(url) || url;
 
       console.log('Opening PDF:', fullUrl);
 
@@ -161,20 +146,7 @@ export default function PastQuestions() {
   // Open solution (YouTube or PDF)
   const openSolution = (solution, question) => {
     // Construct full PDF URL if it's a relative path or contains localhost
-    let pdfUrl = solution.pdfUrl;
-    if (pdfUrl) {
-      if (pdfUrl.startsWith('/uploads/')) {
-        pdfUrl = `${API_URL}${pdfUrl}`;
-      } else if (pdfUrl.includes('localhost')) {
-        // Replace localhost with API_URL
-        const pathMatch = pdfUrl.match(/\/uploads\/.*$/);
-        if (pathMatch) {
-          pdfUrl = `${API_URL}${pathMatch[0]}`;
-        } else {
-          pdfUrl = pdfUrl.replace(/http:\/\/localhost:5000/, API_URL);
-        }
-      }
-    }
+    const pdfUrl = resolveAssetUrl(solution.pdfUrl);
 
     if (solution.youtubeUrl) {
       // Extract video ID from YouTube URL

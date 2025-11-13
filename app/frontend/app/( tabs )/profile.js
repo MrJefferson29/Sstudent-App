@@ -13,9 +13,9 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-// Assuming AuthContext, profileAPI, and API_URL are defined elsewhere
+// Assuming AuthContext and profileAPI are defined elsewhere
 import { AuthContext } from "../Contexts/AuthContext";
-import { profileAPI, API_URL } from "../utils/api";
+import { profileAPI, resolveAssetUrl } from "../utils/api";
 
 // --- Custom Components ---
 
@@ -121,9 +121,9 @@ export default function ProfileScreen() {
   }
 
   // Fallback for profile image
-  const profileImageUri = displayUser?.profilePicture
-    ? `${API_URL}${displayUser.profilePicture}`
-    : `https://ui-avatars.com/api/?name=${encodeURIComponent(displayUser?.name || "User")}&background=10B981&color=fff&size=200`; // New accent color
+  const profileImageUri =
+    resolveAssetUrl(displayUser?.profilePicture) ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(displayUser?.name || "User")}&background=10B981&color=fff&size=200`; // New accent color
 
   return (
     <View style={redesignStyles.container}>

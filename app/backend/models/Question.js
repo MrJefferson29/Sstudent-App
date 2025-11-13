@@ -30,6 +30,10 @@ const questionSchema = new mongoose.Schema({
     type: String,
     required: [true, 'PDF URL is required'],
   },
+  pdfPublicId: {
+    type: String,
+    trim: true,
+  },
   uploadedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

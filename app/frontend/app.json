@@ -45,12 +45,14 @@
     "experiments": {
       "typedRoutes": true
     },
-    "owner": "halaxoft",
+    "owner": "j.f.s.n",
     "extra": {
       "router": {
         "origin": false
+      },
+      "eas": {
+        "projectId": "1985500b-0b1d-4f8e-bbd3-6c34f2d62afe"
       }
-   
     }
   }
 }

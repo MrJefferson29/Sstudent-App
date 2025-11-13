@@ -17,7 +17,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { AuthContext } from "./Contexts/AuthContext";
-import { scholarshipsAPI, API_URL } from "./utils/api";
+import { scholarshipsAPI, resolveAssetUrl } from "./utils/api";
 
 const { width } = Dimensions.get('window');
 const SPACING = 20;
@@ -43,7 +43,14 @@ const dummyScholarships = [
 ];
 
 // --- Reusable Component: Scholarship Card ---
-const ScholarshipCard = ({ scholarship, onPress }) => (
+const ScholarshipCard = ({ scholarship, onPress }) => {
+  const imagesArray = Array.isArray(scholarship.images) ? scholarship.images : [];
+  const scholarshipImageUri =
+    !scholarship.isDummy && imagesArray.length > 0
+      ? resolveAssetUrl(imagesArray[0])
+      : null;
+
+  return (
   <TouchableOpacity
     key={scholarship._id}
     style={redesignStyles.scholarshipCard}
@@ -52,9 +59,9 @@ const ScholarshipCard = ({ scholarship, onPress }) => (
   >
     <View style={redesignStyles.cardImageWrapper}>
       {/* Image/Placeholder */}
-      {(scholarship.images && scholarship.images.length > 0 && !scholarship.isDummy) ? (
+      {scholarshipImageUri ? (
         <Image
-          source={{ uri: `${API_URL}${scholarship.images[0]}` }}
+          source={{ uri: scholarshipImageUri }}
           style={redesignStyles.scholarshipImage}
           resizeMode="cover"
         />
@@ -96,7 +103,8 @@ const ScholarshipCard = ({ scholarship, onPress }) => (
         )}
     </View>
   </TouchableOpacity>
-);
+  );
+};
 
 
 // --- Main Screen Component ---
@@ -157,9 +165,9 @@ export default function ScholarshipsScreen() {
   });
     
   // Profile Image for Header
-  const profileImageUri = user?.profilePicture
-    ? `${API_URL}${user.profilePicture}`
-    : `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || "User")}&background=06B6D4&color=fff&size=128`;
+  const profileImageUri =
+    resolveAssetUrl(user?.profilePicture) ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || "User")}&background=06B6D4&color=fff&size=128`;
 
 
   return (

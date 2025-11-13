@@ -1,5 +1,6 @@
 const Solution = require('../models/Solution');
 const Question = require('../models/Question');
+const { uploadBuffer, deleteResource } = require('../utils/cloudinary');
 
 // Upload a new solution
 exports.uploadSolution = async (req, res) => {
@@ -25,8 +26,18 @@ exports.uploadSolution = async (req, res) => {
     }
 
     // At least one of youtubeUrl or pdfUrl must be provided
-    // Store relative path only (frontend will construct full URL)
-    const pdfUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    let pdfUrl = null;
+    let pdfPublicId = null;
+
+    if (req.file) {
+      const upload = await uploadBuffer(req.file.buffer, {
+        folder: 'solutions',
+        resource_type: 'raw',
+        format: 'pdf',
+      });
+      pdfUrl = upload.secure_url;
+      pdfPublicId = upload.public_id;
+    }
 
     if (!youtubeUrl && !pdfUrl) {
       return res.status(400).json({
@@ -40,6 +51,7 @@ exports.uploadSolution = async (req, res) => {
       question: questionId,
       youtubeUrl: youtubeUrl || null,
       pdfUrl: pdfUrl || null,
+      pdfPublicId: pdfPublicId || null,
       uploadedBy: userId,
     });
 
@@ -132,6 +144,10 @@ exports.deleteSolution = async (req, res) => {
         success: false,
         message: 'Not authorized to delete this solution',
       });
+    }
+
+    if (solution.pdfPublicId) {
+      await deleteResource(solution.pdfPublicId, 'raw');
     }
 
     await Solution.findByIdAndDelete(req.params.id);

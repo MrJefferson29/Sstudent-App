@@ -1,6 +1,6 @@
 const Question = require('../models/Question');
 const Solution = require('../models/Solution');
-const path = require('path');
+const { uploadBuffer, deleteResource } = require('../utils/cloudinary');
 
 // Upload a new question
 exports.uploadQuestion = async (req, res) => {
@@ -23,18 +23,20 @@ exports.uploadQuestion = async (req, res) => {
       });
     }
 
-    // Create PDF URL - store relative path only (frontend will construct full URL)
-    // This allows the URL to work with different hosts (localhost, IP address, etc.)
-    const pdfUrl = `/uploads/${req.file.filename}`;
+    const upload = await uploadBuffer(req.file.buffer, {
+      folder: 'questions',
+      resource_type: 'raw',
+      format: 'pdf',
+    });
 
-    // Create question
     const question = await Question.create({
       school,
       department,
       level,
       subject,
       year,
-      pdfUrl,
+      pdfUrl: upload.secure_url,
+      pdfPublicId: upload.public_id,
       uploadedBy: userId,
     });
 
@@ -153,7 +155,19 @@ exports.deleteQuestion = async (req, res) => {
     }
 
     // Delete associated solutions
-    await Solution.deleteMany({ question: question._id });
+    const solutions = await Solution.find({ question: question._id });
+    await Promise.all(
+      solutions.map(async (solution) => {
+        if (solution.pdfPublicId) {
+          await deleteResource(solution.pdfPublicId, 'raw');
+        }
+        await Solution.findByIdAndDelete(solution._id);
+      })
+    );
+
+    if (question.pdfPublicId) {
+      await deleteResource(question.pdfPublicId, 'raw');
+    }
 
     // Delete the question
     await Question.findByIdAndDelete(req.params.id);

@@ -25,6 +25,22 @@ export const API_URL = __DEV__
   ? DEV_API_URL
   : (process.env.EXPO_PUBLIC_API_URL || 'https://your-backend-url.com');
 
+export const resolveAssetUrl = (value) => {
+  if (!value) return null;
+
+  if (typeof value === 'object') {
+    const candidate = value.url || value.secure_url || value.path;
+    if (!candidate) return null;
+    return /^https?:\/\//i.test(candidate) ? candidate : `${API_URL}${candidate}`;
+  }
+
+  if (typeof value === 'string') {
+    return /^https?:\/\//i.test(value) ? value : `${API_URL}${value}`;
+  }
+
+  return null;
+};
+
 // Create axios instance with default config
 const api = axios.create({
   baseURL: API_URL,

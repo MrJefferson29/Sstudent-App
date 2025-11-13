@@ -1,46 +1,54 @@
 const Scholarship = require('../models/Scholarship');
-const path = require('path');
-const fs = require('fs');
+const { uploadBuffer, deleteResource } = require('../utils/cloudinary');
+
+const normalizeImages = (images = []) =>
+  images.map((image) => {
+    if (typeof image === 'string') {
+      return { url: image, publicId: null };
+    }
+    return image;
+  });
 
 // Upload a new scholarship
 exports.uploadScholarship = async (req, res) => {
   try {
     const { organizationName, description, location, websiteLink } = req.body;
-    const userId = req.userId; // From auth middleware
+    const userId = req.userId;
 
-    // Validation
     if (!organizationName || !description || !location || !websiteLink) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide all required fields: organizationName, description, location, websiteLink',
+        message:
+          'Please provide all required fields: organizationName, description, location, websiteLink',
       });
     }
 
-    // Handle images - can be single file or multiple files
-    let imageUrls = [];
-    if (req.files && req.files.length > 0) {
-      // Multiple images
-      imageUrls = req.files.map(file => `/uploads/${file.filename}`);
-    } else if (req.file) {
-      // Single image
-      imageUrls = [`/uploads/${req.file.filename}`];
-    }
+    const files = req.files?.length ? req.files : req.file ? [req.file] : [];
 
-    // At least one image is required
-    if (imageUrls.length === 0) {
+    if (!files.length) {
       return res.status(400).json({
         success: false,
         message: 'At least one image is required',
       });
     }
 
-    // Create scholarship
+    const uploads = await Promise.all(
+      files.map((file) =>
+        uploadBuffer(file.buffer, { folder: 'scholarships', resource_type: 'image' })
+      )
+    );
+
+    const imageData = uploads.map((upload) => ({
+      url: upload.secure_url,
+      publicId: upload.public_id,
+    }));
+
     const scholarship = await Scholarship.create({
       organizationName,
       description,
       location,
       websiteLink,
-      images: imageUrls,
+      images: imageData,
       uploadedBy: userId,
     });
 
@@ -64,12 +72,18 @@ exports.getAllScholarships = async (req, res) => {
   try {
     const scholarships = await Scholarship.find()
       .populate('uploadedBy', 'name email')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const normalized = scholarships.map((item) => ({
+      ...item,
+      images: normalizeImages(item.images),
+    }));
 
     res.status(200).json({
       success: true,
-      count: scholarships.length,
-      data: scholarships,
+      count: normalized.length,
+      data: normalized,
     });
   } catch (error) {
     console.error('Get scholarships error:', error);
@@ -84,15 +98,21 @@ exports.getAllScholarships = async (req, res) => {
 // Get single scholarship
 exports.getScholarshipById = async (req, res) => {
   try {
-    const scholarship = await Scholarship.findById(req.params.id)
-      .populate('uploadedBy', 'name email');
+    const scholarshipDoc = await Scholarship.findById(req.params.id)
+      .populate('uploadedBy', 'name email')
+      .lean();
 
-    if (!scholarship) {
+    if (!scholarshipDoc) {
       return res.status(404).json({
         success: false,
         message: 'Scholarship not found',
       });
     }
+
+    const scholarship = {
+      ...scholarshipDoc,
+      images: normalizeImages(scholarshipDoc.images),
+    };
 
     res.status(200).json({
       success: true,
@@ -113,9 +133,7 @@ exports.updateScholarship = async (req, res) => {
   try {
     const { organizationName, description, location, websiteLink } = req.body;
     const scholarshipId = req.params.id;
-    const userId = req.userId; // From auth middleware
 
-    // Find scholarship
     const scholarship = await Scholarship.findById(scholarshipId);
     if (!scholarship) {
       return res.status(404).json({
@@ -124,40 +142,39 @@ exports.updateScholarship = async (req, res) => {
       });
     }
 
-    // Check if user is the owner (optional - you might want to allow admins to edit any)
-    // For now, we'll allow any authenticated admin to edit
+    const files = req.files?.length ? req.files : req.file ? [req.file] : [];
 
-    // Handle new images if uploaded
-    let imageUrls = scholarship.images || [];
-    if (req.files && req.files.length > 0) {
-      // Add new images to existing ones
-      const newImages = req.files.map(file => `/uploads/${file.filename}`);
-      imageUrls = [...imageUrls, ...newImages];
-    } else if (req.file) {
-      // Single new image
-      imageUrls = [...imageUrls, `/uploads/${req.file.filename}`];
+    let newImages = [];
+    if (files.length > 0) {
+      const uploads = await Promise.all(
+        files.map((file) =>
+          uploadBuffer(file.buffer, { folder: 'scholarships', resource_type: 'image' })
+        )
+      );
+      newImages = uploads.map((upload) => ({
+        url: upload.secure_url,
+        publicId: upload.public_id,
+      }));
     }
 
-    // Update scholarship
-    const updateData = {
-      organizationName: organizationName || scholarship.organizationName,
-      description: description || scholarship.description,
-      location: location || scholarship.location,
-      websiteLink: websiteLink || scholarship.websiteLink,
-      images: imageUrls,
-      updatedAt: Date.now(),
-    };
+    const normalizedExisting = normalizeImages(scholarship.images);
 
-    const updatedScholarship = await Scholarship.findByIdAndUpdate(
-      scholarshipId,
-      updateData,
-      { new: true, runValidators: true }
-    ).populate('uploadedBy', 'name email');
+    scholarship.organizationName = organizationName || scholarship.organizationName;
+    scholarship.description = description || scholarship.description;
+    scholarship.location = location || scholarship.location;
+    scholarship.websiteLink = websiteLink || scholarship.websiteLink;
+    scholarship.images = [...normalizedExisting, ...newImages];
+    scholarship.updatedAt = Date.now();
+
+    const updatedScholarship = await scholarship.save();
 
     res.status(200).json({
       success: true,
       message: 'Scholarship updated successfully',
-      data: updatedScholarship,
+      data: {
+        ...updatedScholarship.toObject(),
+        images: normalizeImages(updatedScholarship.images),
+      },
     });
   } catch (error) {
     console.error('Update scholarship error:', error);
@@ -173,9 +190,7 @@ exports.updateScholarship = async (req, res) => {
 exports.deleteScholarship = async (req, res) => {
   try {
     const scholarshipId = req.params.id;
-    const userId = req.userId; // From auth middleware
 
-    // Find scholarship
     const scholarship = await Scholarship.findById(scholarshipId);
     if (!scholarship) {
       return res.status(404).json({
@@ -184,17 +199,13 @@ exports.deleteScholarship = async (req, res) => {
       });
     }
 
-    // Delete associated image files
-    if (scholarship.images && scholarship.images.length > 0) {
-      scholarship.images.forEach(imagePath => {
-        const filePath = path.join(__dirname, '..', imagePath);
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
-      });
-    }
+    const normalizedImages = normalizeImages(scholarship.images);
+    await Promise.all(
+      normalizedImages.map((image) =>
+        image.publicId ? deleteResource(image.publicId, 'image') : Promise.resolve()
+      )
+    );
 
-    // Delete scholarship
     await Scholarship.findByIdAndDelete(scholarshipId);
 
     res.status(200).json({
@@ -215,10 +226,15 @@ exports.deleteScholarship = async (req, res) => {
 exports.deleteScholarshipImage = async (req, res) => {
   try {
     const { scholarshipId } = req.params;
-    const { imageUrl } = req.body; // Get image URL from request body
-    const userId = req.userId; // From auth middleware
+    const { imagePublicId, imageUrl } = req.body;
 
-    // Find scholarship
+    if (!imagePublicId && !imageUrl) {
+      return res.status(400).json({
+        success: false,
+        message: 'Image identifier is required',
+      });
+    }
+
     const scholarship = await Scholarship.findById(scholarshipId);
     if (!scholarship) {
       return res.status(404).json({
@@ -227,36 +243,36 @@ exports.deleteScholarshipImage = async (req, res) => {
       });
     }
 
-    if (!imageUrl) {
-      return res.status(400).json({
-        success: false,
-        message: 'Image URL is required',
-      });
-    }
+    const normalizedImages = normalizeImages(scholarship.images);
+    const targetIndex = normalizedImages.findIndex(
+      (image) =>
+        (imagePublicId && image.publicId === imagePublicId) ||
+        (imageUrl && image.url === imageUrl)
+    );
 
-    // Remove image from array (imageUrl should be the full path like /uploads/filename.jpg)
-    const imageIndex = scholarship.images.findIndex(img => img === imageUrl);
-    if (imageIndex === -1) {
+    if (targetIndex === -1) {
       return res.status(404).json({
         success: false,
         message: 'Image not found',
       });
     }
 
-    // Delete image file
-    const filePath = path.join(__dirname, '..', imageUrl);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    const [removedImage] = normalizedImages.splice(targetIndex, 1);
+
+    if (removedImage?.publicId) {
+      await deleteResource(removedImage.publicId, 'image');
     }
 
-    // Remove from array
-    scholarship.images.splice(imageIndex, 1);
-    await scholarship.save();
+    scholarship.images = normalizedImages;
+    const updatedScholarship = await scholarship.save();
 
     res.status(200).json({
       success: true,
       message: 'Image deleted successfully',
-      data: scholarship,
+      data: {
+        ...updatedScholarship.toObject(),
+        images: normalizeImages(updatedScholarship.images),
+      },
     });
   } catch (error) {
     console.error('Delete image error:', error);
@@ -267,4 +283,3 @@ exports.deleteScholarshipImage = async (req, res) => {
     });
   }
 };
-

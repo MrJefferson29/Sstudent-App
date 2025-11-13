@@ -1,6 +1,16 @@
 const Internship = require('../models/Internship');
-const path = require('path');
-const fs = require('fs');
+const { uploadBuffer, deleteResource } = require('../utils/cloudinary');
+
+const normalizeImage = (image) => {
+  if (!image) return null;
+  if (typeof image === 'string') {
+    return { url: image, publicId: null };
+  }
+  if (image.url) {
+    return image;
+  }
+  return { url: image, publicId: null };
+};
 
 // Upload a new internship
 exports.uploadInternship = async (req, res) => {
@@ -16,10 +26,16 @@ exports.uploadInternship = async (req, res) => {
       });
     }
 
-    // Handle image - optional but recommended
-    let imageUrl = null;
+    let image = null;
     if (req.file) {
-      imageUrl = `/uploads/${req.file.filename}`;
+      const upload = await uploadBuffer(req.file.buffer, {
+        folder: 'internships',
+        resource_type: 'image',
+      });
+      image = {
+        url: upload.secure_url,
+        publicId: upload.public_id,
+      };
     }
 
     // Create internship
@@ -30,7 +46,7 @@ exports.uploadInternship = async (req, res) => {
       duration,
       description,
       applicationLink,
-      image: imageUrl,
+      image,
       uploadedBy: userId,
     });
 
@@ -54,12 +70,18 @@ exports.getAllInternships = async (req, res) => {
   try {
     const internships = await Internship.find()
       .populate('uploadedBy', 'name email')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const normalized = internships.map((internship) => ({
+      ...internship,
+      image: normalizeImage(internship.image),
+    }));
 
     res.status(200).json({
       success: true,
-      count: internships.length,
-      data: internships,
+      count: normalized.length,
+      data: normalized,
     });
   } catch (error) {
     console.error('Get internships error:', error);
@@ -74,15 +96,21 @@ exports.getAllInternships = async (req, res) => {
 // Get single internship
 exports.getInternshipById = async (req, res) => {
   try {
-    const internship = await Internship.findById(req.params.id)
-      .populate('uploadedBy', 'name email');
+    const internshipDoc = await Internship.findById(req.params.id)
+      .populate('uploadedBy', 'name email')
+      .lean();
 
-    if (!internship) {
+    if (!internshipDoc) {
       return res.status(404).json({
         success: false,
         message: 'Internship not found',
       });
     }
+
+    const internship = {
+      ...internshipDoc,
+      image: normalizeImage(internshipDoc.image),
+    };
 
     res.status(200).json({
       success: true,
@@ -103,7 +131,6 @@ exports.updateInternship = async (req, res) => {
   try {
     const { title, company, location, duration, description, applicationLink } = req.body;
     const internshipId = req.params.id;
-    const userId = req.userId; // From auth middleware
 
     // Find internship
     const internship = await Internship.findById(internshipId);
@@ -114,41 +141,42 @@ exports.updateInternship = async (req, res) => {
       });
     }
 
-    // Handle new image if uploaded
-    let imageUrl = internship.image;
+    let image = normalizeImage(internship.image);
     if (req.file) {
-      // Delete old image if exists
-      if (internship.image) {
-        const oldFilePath = path.join(__dirname, '..', internship.image);
-        if (fs.existsSync(oldFilePath)) {
-          fs.unlinkSync(oldFilePath);
-        }
+      if (image?.publicId) {
+        await deleteResource(image.publicId, 'image');
       }
-      imageUrl = `/uploads/${req.file.filename}`;
+      const upload = await uploadBuffer(req.file.buffer, {
+        folder: 'internships',
+        resource_type: 'image',
+      });
+      image = {
+        url: upload.secure_url,
+        publicId: upload.public_id,
+      };
     }
 
-    // Update internship
-    const updateData = {
-      title: title || internship.title,
-      company: company || internship.company,
-      location: location || internship.location,
-      duration: duration || internship.duration,
-      description: description || internship.description,
-      applicationLink: applicationLink || internship.applicationLink,
-      image: imageUrl,
-      updatedAt: Date.now(),
-    };
+    internship.title = title || internship.title;
+    internship.company = company || internship.company;
+    internship.location = location || internship.location;
+    internship.duration = duration || internship.duration;
+    internship.description = description || internship.description;
+    internship.applicationLink = applicationLink || internship.applicationLink;
+    internship.image = image;
+    internship.updatedAt = Date.now();
 
-    const updatedInternship = await Internship.findByIdAndUpdate(
-      internshipId,
-      updateData,
-      { new: true, runValidators: true }
-    ).populate('uploadedBy', 'name email');
+    await internship.save();
+    await internship.populate('uploadedBy', 'name email');
+
+    const normalized = {
+      ...internship.toObject(),
+      image: normalizeImage(internship.image),
+    };
 
     res.status(200).json({
       success: true,
       message: 'Internship updated successfully',
-      data: updatedInternship,
+      data: normalized,
     });
   } catch (error) {
     console.error('Update internship error:', error);
@@ -164,7 +192,6 @@ exports.updateInternship = async (req, res) => {
 exports.deleteInternship = async (req, res) => {
   try {
     const internshipId = req.params.id;
-    const userId = req.userId; // From auth middleware
 
     // Find internship
     const internship = await Internship.findById(internshipId);
@@ -175,12 +202,9 @@ exports.deleteInternship = async (req, res) => {
       });
     }
 
-    // Delete associated image file
-    if (internship.image) {
-      const filePath = path.join(__dirname, '..', internship.image);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
+    const image = normalizeImage(internship.image);
+    if (image?.publicId) {
+      await deleteResource(image.publicId, 'image');
     }
 
     // Delete internship

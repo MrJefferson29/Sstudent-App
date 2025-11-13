@@ -1,6 +1,19 @@
 const Contest = require('../models/Contest');
 const Contestant = require('../models/Contestant');
 const Vote = require('../models/Vote');
+const { uploadBuffer, deleteResource } = require('../utils/cloudinary');
+
+const normalizeContestant = (contestant) => {
+  const data = contestant.toObject ? contestant.toObject() : contestant;
+  return {
+    ...data,
+    image: data.image
+      ? typeof data.image === 'string'
+        ? { url: data.image, publicId: null }
+        : data.image
+      : null,
+  };
+};
 
 exports.getContests = async (req, res) => {
   try {
@@ -21,7 +34,7 @@ exports.getContestants = async (req, res) => {
       contestants.map(async (contestant) => {
         const voteCount = await Vote.countDocuments({ contest: contestId, contestant: contestant._id });
         return {
-          ...contestant.toObject(),
+          ...normalizeContestant(contestant),
           voteCount,
         };
       })
@@ -49,9 +62,18 @@ exports.addContestant = async (req, res) => {
   try {
     const { contestId } = req.params;
     const { name, bio } = req.body;
-    const image = req.file ? `/uploads/${req.file.filename}` : undefined;
+
+    let image = null;
+    if (req.file) {
+      const upload = await uploadBuffer(req.file.buffer, {
+        folder: 'contests',
+        resource_type: 'image',
+      });
+      image = { url: upload.secure_url, publicId: upload.public_id };
+    }
+
     const contestant = await Contestant.create({ contest: contestId, name, bio, image });
-    res.status(201).json({ success: true, data: contestant });
+    res.status(201).json({ success: true, data: normalizeContestant(contestant) });
   } catch (e) {
     res.status(500).json({ success: false, message: 'Error adding contestant', error: e.message });
   }
@@ -149,31 +171,31 @@ exports.seedDummyData = async (req, res) => {
     const contestantsData = [
       // Mr. University contestants
       [
-        { name: 'John Doe', bio: 'Computer Science student, passionate about technology and innovation', image: '/uploads/contestant1.jpg' },
-        { name: 'Michael Smith', bio: 'Engineering student with leadership qualities', image: '/uploads/contestant2.jpg' },
-        { name: 'David Johnson', bio: 'Business Administration student, entrepreneur at heart', image: '/uploads/contestant3.jpg' },
-        { name: 'Robert Brown', bio: 'Medical student dedicated to healthcare', image: '/uploads/contestant4.jpg' },
+        { name: 'John Doe', bio: 'Computer Science student, passionate about technology and innovation' },
+        { name: 'Michael Smith', bio: 'Engineering student with leadership qualities' },
+        { name: 'David Johnson', bio: 'Business Administration student, entrepreneur at heart' },
+        { name: 'Robert Brown', bio: 'Medical student dedicated to healthcare' },
       ],
       // Miss University contestants
       [
-        { name: 'Jane Smith', bio: 'Arts student with creative talents', image: '/uploads/contestant5.jpg' },
-        { name: 'Emily Davis', bio: 'Science student passionate about research', image: '/uploads/contestant6.jpg' },
-        { name: 'Sarah Wilson', bio: 'Law student with strong advocacy skills', image: '/uploads/contestant7.jpg' },
-        { name: 'Lisa Anderson', bio: 'Education student focused on teaching excellence', image: '/uploads/contestant8.jpg' },
+        { name: 'Jane Smith', bio: 'Arts student with creative talents' },
+        { name: 'Emily Davis', bio: 'Science student passionate about research' },
+        { name: 'Sarah Wilson', bio: 'Law student with strong advocacy skills' },
+        { name: 'Lisa Anderson', bio: 'Education student focused on teaching excellence' },
       ],
       // Best Dressed contestants
       [
-        { name: 'Alex Thompson', bio: 'Fashion design student with impeccable style', image: '/uploads/contestant9.jpg' },
-        { name: 'Chris Martinez', bio: 'Business student known for elegant attire', image: '/uploads/contestant10.jpg' },
-        { name: 'Jordan Lee', bio: 'Arts student with unique fashion sense', image: '/uploads/contestant11.jpg' },
-        { name: 'Taylor Garcia', bio: 'Communications student with trendy style', image: '/uploads/contestant12.jpg' },
+        { name: 'Alex Thompson', bio: 'Fashion design student with impeccable style' },
+        { name: 'Chris Martinez', bio: 'Business student known for elegant attire' },
+        { name: 'Jordan Lee', bio: 'Arts student with unique fashion sense' },
+        { name: 'Taylor Garcia', bio: 'Communications student with trendy style' },
       ],
       // Most Talented contestants
       [
-        { name: 'Sam Parker', bio: 'Music and performing arts student', image: '/uploads/contestant13.jpg' },
-        { name: 'Casey Taylor', bio: 'Sports and athletics enthusiast', image: '/uploads/contestant14.jpg' },
-        { name: 'Morgan White', bio: 'Dance and choreography student', image: '/uploads/contestant15.jpg' },
-        { name: 'Riley Clark', bio: 'Creative writing and poetry talent', image: '/uploads/contestant16.jpg' },
+        { name: 'Sam Parker', bio: 'Music and performing arts student' },
+        { name: 'Casey Taylor', bio: 'Sports and athletics enthusiast' },
+        { name: 'Morgan White', bio: 'Dance and choreography student' },
+        { name: 'Riley Clark', bio: 'Creative writing and poetry talent' },
       ],
     ];
 

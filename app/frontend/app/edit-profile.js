@@ -14,7 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { AuthContext } from "./Contexts/AuthContext";
-import { profileAPI, API_URL } from "./utils/api";
+import { profileAPI, resolveAssetUrl } from "./utils/api";
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -38,7 +38,7 @@ export default function EditProfileScreen() {
         level: user.level || "",
       });
       if (user.profilePicture) {
-        setProfileImage(`${API_URL}${user.profilePicture}`);
+        setProfileImage(resolveAssetUrl(user.profilePicture));
       }
     }
   }, [user]);

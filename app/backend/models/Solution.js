@@ -16,6 +16,11 @@ const solutionSchema = new mongoose.Schema({
     trim: true,
     default: null,
   },
+  pdfPublicId: {
+    type: String,
+    trim: true,
+    default: null,
+  },
   uploadedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
