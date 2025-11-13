@@ -1,0 +1,496 @@
+{
+	"info": {
+		"_postman_id": "student-app-api",
+		"name": "Student App API",
+		"description": "Complete API collection for Student App - Questions and Solutions",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Register User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"password123\",\n  \"school\": \"Coltech\",\n  \"department\": \"Computer Science\",\n  \"level\": \"Level 100\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "register"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200 || pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.token) {",
+									"        pm.environment.set(\"token\", jsonData.token);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Login User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "login"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200 || pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.token) {",
+									"        pm.environment.set(\"token\", jsonData.token);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Get Current User",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/auth/me",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "me"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Questions",
+			"item": [
+				{
+					"name": "Upload Question",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "school",
+									"value": "Coltech",
+									"type": "text"
+								},
+								{
+									"key": "department",
+									"value": "Computer Science",
+									"type": "text"
+								},
+								{
+									"key": "level",
+									"value": "Level 100",
+									"type": "text"
+								},
+								{
+									"key": "subject",
+									"value": "Mathematics",
+									"type": "text"
+								},
+								{
+									"key": "year",
+									"value": "2023",
+									"type": "text"
+								},
+								{
+									"key": "pdf",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/questions",
+							"host": ["{{base_url}}"],
+							"path": ["questions"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200 || pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data._id) {",
+									"        pm.environment.set(\"question_id\", jsonData.data._id);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Get All Questions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/questions",
+							"host": ["{{base_url}}"],
+							"path": ["questions"]
+						}
+					}
+				},
+				{
+					"name": "Get All Questions (Filtered)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/questions?school=Coltech&department=Computer Science&level=Level 100&subject=Mathematics&year=2023",
+							"host": ["{{base_url}}"],
+							"path": ["questions"],
+							"query": [
+								{
+									"key": "school",
+									"value": "Coltech"
+								},
+								{
+									"key": "department",
+									"value": "Computer Science"
+								},
+								{
+									"key": "level",
+									"value": "Level 100"
+								},
+								{
+									"key": "subject",
+									"value": "Mathematics"
+								},
+								{
+									"key": "year",
+									"value": "2023"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Single Question",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/questions/{{question_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["questions", "{{question_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Delete Question",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/questions/{{question_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["questions", "{{question_id}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Solutions",
+			"item": [
+				{
+					"name": "Upload Solution (YouTube Only)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "questionId",
+									"value": "{{question_id}}",
+									"type": "text"
+								},
+								{
+									"key": "youtubeUrl",
+									"value": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/solutions",
+							"host": ["{{base_url}}"],
+							"path": ["solutions"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200 || pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data._id) {",
+									"        pm.environment.set(\"solution_id\", jsonData.data._id);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Upload Solution (PDF Only)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "questionId",
+									"value": "{{question_id}}",
+									"type": "text"
+								},
+								{
+									"key": "pdf",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/solutions",
+							"host": ["{{base_url}}"],
+							"path": ["solutions"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200 || pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data._id) {",
+									"        pm.environment.set(\"solution_id\", jsonData.data._id);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Upload Solution (Both YouTube and PDF)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "questionId",
+									"value": "{{question_id}}",
+									"type": "text"
+								},
+								{
+									"key": "youtubeUrl",
+									"value": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+									"type": "text"
+								},
+								{
+									"key": "pdf",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/solutions",
+							"host": ["{{base_url}}"],
+							"path": ["solutions"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200 || pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data._id) {",
+									"        pm.environment.set(\"solution_id\", jsonData.data._id);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Get All Solutions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/solutions",
+							"host": ["{{base_url}}"],
+							"path": ["solutions"]
+						}
+					}
+				},
+				{
+					"name": "Get Solutions by Question",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/solutions?questionId={{question_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["solutions"],
+							"query": [
+								{
+									"key": "questionId",
+									"value": "{{question_id}}"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Single Solution",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/solutions/{{solution_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["solutions", "{{solution_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Delete Solution",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/solutions/{{solution_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["solutions", "{{solution_id}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Health Check",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/",
+					"host": ["{{base_url}}"],
+					"path": [""]
+				}
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:5000",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "question_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "solution_id",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
+
