@@ -5,8 +5,8 @@ import { AuthContext } from './Contexts/AuthContext';
 import { router } from 'expo-router';
 // API Configuration - Update this URL to match your backend
 const API_URL = __DEV__ 
-  ? 'http://192.168.160.179:5000'  // Development - Change to your IP for physical device
-  : 'https://your-backend-url.com';  // Production
+  ? 'https://uba-r875.onrender.com'  // Development - Change to your IP for physical device
+  : 'https://uba-r875.onrender.com';  // Production
 
 export default function Login() {
     const { setUserToken, userToken, isLoading } = useContext(AuthContext);

@@ -43,9 +43,9 @@ export default function StudyGroupsScreen() {
     const envUrl = Constants?.expoConfig?.extra?.apiUrl || process.env.EXPO_PUBLIC_API_URL;
     if (envUrl) return envUrl;
     // Emulator-safe defaults
-    if (Platform.OS === 'android') return 'http://192.168.1.184:5000';
+    if (Platform.OS === 'android') return 'https://uba-r875.onrender.com';
     // iOS simulator/mac or web fallback
-    return 'http://localhost:5000';
+    return 'https://ficedu-payment.onrender.com';
   }, []);
 
   const socketRef = useRef(null);

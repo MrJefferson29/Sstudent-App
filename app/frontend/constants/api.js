@@ -7,8 +7,8 @@
 // For physical device: 'http://YOUR_COMPUTER_IP:5000'
 
 export const API_URL = __DEV__ 
-  ? 'http://10.6.18.196:5000'  // Development
-  : 'https://your-backend-url.com';  // Production
+  ? 'https://uba-r875.onrender.com'  // Development
+  : 'https://uba-r875.onrender.com';  // Production
 
 export default API_URL;
 

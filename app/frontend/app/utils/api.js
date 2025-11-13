@@ -14,16 +14,16 @@ const DEV_API_URL = (() => {
   if (envUrl) return envUrl;
 
   // Default per-platform
-  if (Platform.OS === 'android') return 'http://192.168.1.184:5000'; // Android emulator
-  if (Platform.OS === 'ios') return 'http://localhost:5000';     // iOS simulator
-  if (Platform.OS === 'web') return 'http://localhost:5000';     // Expo web
+  if (Platform.OS === 'android') return 'https://uba-r875.onrender.com'; // Android emulator
+  if (Platform.OS === 'ios') return 'https://uba-r875.onrender.com';     // iOS simulator
+  if (Platform.OS === 'web') return 'https://uba-r875.onrender.com';     // Expo web
   // Fallback
-  return 'http://localhost:5000';
+  return 'https://uba-r875.onrender.com';
 })();
 
 export const API_URL = __DEV__
   ? DEV_API_URL
-  : (process.env.EXPO_PUBLIC_API_URL || 'https://your-backend-url.com');
+  : (process.env.EXPO_PUBLIC_API_URL || 'https://uba-r875.onrender.com');
 
 export const resolveAssetUrl = (value) => {
   if (!value) return null;
