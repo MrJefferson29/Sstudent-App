@@ -14,7 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { courseChaptersAPI, courseCommentsAPI, resolveAssetUrl } from "./utils/api";
-import { Video } from "expo-av";
+import { WebView } from "react-native-webview";
 
 export default function CourseChapters() {
   const { courseId, courseTitle } = useLocalSearchParams();
@@ -29,7 +29,7 @@ export default function CourseChapters() {
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [isQuestion, setIsQuestion] = useState(false);
-  const [videoRef, setVideoRef] = useState(null);
+  const [videoLoading, setVideoLoading] = useState(true);
 
   useEffect(() => {
     fetchChapters();
@@ -80,10 +80,34 @@ export default function CourseChapters() {
     fetchChapters();
   };
 
+  // Helper function to extract YouTube video ID from URL
+  const extractYouTubeId = (url) => {
+    if (!url) return null;
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+      /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
+    ];
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+    return null;
+  };
+
+  // Helper function to generate YouTube embed URL
+  const getYouTubeEmbedUrl = (youtubeUrl) => {
+    const videoId = extractYouTubeId(youtubeUrl);
+    if (!videoId) return null;
+    return `https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1&modestbranding=1&rel=0&showinfo=0&controls=1`;
+  };
+
   const handleChapterPress = (chapter) => {
-    if (chapter.videoUrl) {
+    if (chapter.youtubeUrl) {
       setSelectedChapter(chapter);
       setShowComments(true);
+      setVideoLoading(true);
     } else {
       Alert.alert("No Video", "This chapter does not have a video yet.");
     }
@@ -188,9 +212,9 @@ export default function CourseChapters() {
                   onPress={() => handleChapterPress(chapter)}
                 >
                   <Ionicons
-                    name={chapter.videoUrl ? "play-circle" : "lock-closed"}
+                    name={chapter.youtubeUrl ? "play-circle" : "lock-closed"}
                     size={24}
-                    color={chapter.videoUrl ? "#2563EB" : "#9CA3AF"}
+                    color={chapter.youtubeUrl ? "#2563EB" : "#9CA3AF"}
                   />
                   <View style={styles.chapterInfo}>
                     <Text style={styles.chapterTitle}>{chapter.title}</Text>
@@ -206,7 +230,7 @@ export default function CourseChapters() {
                       </Text>
                     )}
                   </View>
-                  {chapter.videoUrl && (
+                  {chapter.youtubeUrl && (
                     <Ionicons name="chevron-forward" size={20} color="#999" />
                   )}
                 </TouchableOpacity>
@@ -221,9 +245,9 @@ export default function CourseChapters() {
                         onPress={() => handleChapterPress(subChapter)}
                       >
                         <Ionicons
-                          name={subChapter.videoUrl ? "play" : "lock-closed"}
+                          name={subChapter.youtubeUrl ? "play" : "lock-closed"}
                           size={20}
-                          color={subChapter.videoUrl ? "#16A34A" : "#9CA3AF"}
+                          color={subChapter.youtubeUrl ? "#16A34A" : "#9CA3AF"}
                         />
                         <View style={styles.subChapterInfo}>
                           <Text style={styles.subChapterTitle}>
@@ -236,7 +260,7 @@ export default function CourseChapters() {
                             </Text>
                           )}
                         </View>
-                        {subChapter.videoUrl && (
+                        {subChapter.youtubeUrl && (
                           <Ionicons name="chevron-forward" size={18} color="#999" />
                         )}
                       </TouchableOpacity>
@@ -249,18 +273,41 @@ export default function CourseChapters() {
         </ScrollView>
       ) : selectedChapter ? (
         <View style={styles.videoContainer}>
-          {/* Video Player */}
-          {selectedChapter.videoUrl && (
-            <View style={styles.videoWrapper}>
-              <Video
-                ref={setVideoRef}
-                source={{ uri: resolveAssetUrl(selectedChapter.videoUrl) }}
-                style={styles.video}
-                useNativeControls
-                resizeMode="contain"
-              />
-            </View>
-          )}
+          {/* YouTube Video Player */}
+          {selectedChapter.youtubeUrl && (() => {
+            const embedUrl = getYouTubeEmbedUrl(selectedChapter.youtubeUrl);
+            if (!embedUrl) {
+              return (
+                <View style={styles.videoWrapper}>
+                  <Text style={styles.errorText}>Invalid YouTube URL</Text>
+                </View>
+              );
+            }
+            return (
+              <View style={styles.videoWrapper}>
+                {videoLoading && (
+                  <View style={styles.videoLoading}>
+                    <ActivityIndicator size="large" color="#2563EB" />
+                    <Text style={styles.loadingText}>Loading video...</Text>
+                  </View>
+                )}
+                <WebView
+                  source={{ uri: embedUrl }}
+                  style={styles.video}
+                  allowsFullscreenVideo={true}
+                  mediaPlaybackRequiresUserAction={false}
+                  onLoadStart={() => setVideoLoading(true)}
+                  onLoadEnd={() => setVideoLoading(false)}
+                  onError={() => {
+                    setVideoLoading(false);
+                    Alert.alert("Error", "Failed to load video");
+                  }}
+                  javaScriptEnabled={true}
+                  domStorageEnabled={true}
+                />
+              </View>
+            );
+          })()}
 
           {/* Chapter Info */}
           <View style={styles.chapterInfoSection}>
@@ -526,6 +573,28 @@ const styles = StyleSheet.create({
   video: {
     width: "100%",
     height: "100%",
+    backgroundColor: "#000",
+  },
+  videoLoading: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#000",
+    zIndex: 1,
+  },
+  loadingText: {
+    color: "#fff",
+    marginTop: 10,
+    fontSize: 14,
+  },
+  errorText: {
+    color: "#EF4444",
+    textAlign: "center",
+    padding: 20,
   },
   chapterInfoSection: {
     backgroundColor: "#fff",

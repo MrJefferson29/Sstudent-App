@@ -25,19 +25,19 @@ const courseChapterSchema = new mongoose.Schema({
     ref: 'CourseChapter',
     default: null, // If null, it's a top-level chapter; otherwise, it's a sub-chapter
   },
-  videoUrl: {
+  youtubeUrl: {
     type: String,
     trim: true,
     default: null,
-  },
-  videoPublicId: {
-    type: String,
-    trim: true,
-    default: null,
-  },
-  duration: {
-    type: Number, // Duration in seconds
-    default: 0,
+    validate: {
+      validator: function(v) {
+        if (!v) return true; // Allow null/empty
+        // Validate YouTube URL format
+        const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/;
+        return youtubeRegex.test(v);
+      },
+      message: 'Please provide a valid YouTube URL',
+    },
   },
   createdAt: {
     type: Date,

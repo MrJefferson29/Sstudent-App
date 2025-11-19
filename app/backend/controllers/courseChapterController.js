@@ -1,11 +1,29 @@
 const CourseChapter = require('../models/CourseChapter');
 const Course = require('../models/Course');
-const { uploadBuffer, deleteResource } = require('../utils/cloudinary');
+
+// Helper function to extract YouTube video ID from URL
+const extractYouTubeId = (url) => {
+  if (!url) return null;
+  
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+    /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match && match[1]) {
+      return match[1];
+    }
+  }
+  
+  return null;
+};
 
 // Create a new chapter
 exports.createChapter = async (req, res) => {
   try {
-    const { course, title, description, order, parentChapter } = req.body;
+    const { course, title, description, order, parentChapter, youtubeUrl } = req.body;
 
     if (!course || !title) {
       return res.status(400).json({
@@ -34,20 +52,18 @@ exports.createChapter = async (req, res) => {
       }
     }
 
-    let videoUrl = null;
-    let videoPublicId = null;
-    let duration = 0;
-
-    // Handle video upload
-    if (req.file) {
-      const upload = await uploadBuffer(req.file.buffer, {
-        folder: 'course-videos',
-        resource_type: 'video',
-      });
-      videoUrl = upload.secure_url;
-      videoPublicId = upload.public_id;
-      // Note: Duration extraction from video would require additional processing
-      // For now, duration can be set manually or via a separate API call
+    // Validate and normalize YouTube URL
+    let normalizedYoutubeUrl = null;
+    if (youtubeUrl && youtubeUrl.trim()) {
+      const videoId = extractYouTubeId(youtubeUrl);
+      if (videoId) {
+        normalizedYoutubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid YouTube URL. Please provide a valid YouTube video link.',
+        });
+      }
     }
 
     const chapter = await CourseChapter.create({
@@ -56,9 +72,7 @@ exports.createChapter = async (req, res) => {
       description,
       order: order || 0,
       parentChapter: parentChapter || null,
-      videoUrl,
-      videoPublicId,
-      duration,
+      youtubeUrl: normalizedYoutubeUrl,
     });
 
     const populatedChapter = await CourseChapter.findById(chapter._id)
@@ -154,7 +168,7 @@ exports.getChapterById = async (req, res) => {
 // Update a chapter
 exports.updateChapter = async (req, res) => {
   try {
-    const { title, description, order, parentChapter } = req.body;
+    const { title, description, order, parentChapter, youtubeUrl } = req.body;
     const chapter = await CourseChapter.findById(req.params.id);
 
     if (!chapter) {
@@ -169,19 +183,21 @@ exports.updateChapter = async (req, res) => {
     if (order !== undefined) chapter.order = order;
     if (parentChapter !== undefined) chapter.parentChapter = parentChapter;
 
-    // Handle video update
-    if (req.file) {
-      // Delete old video if exists
-      if (chapter.videoPublicId) {
-        await deleteResource(chapter.videoPublicId, 'video');
+    // Handle YouTube URL update
+    if (youtubeUrl !== undefined) {
+      if (youtubeUrl && youtubeUrl.trim()) {
+        const videoId = extractYouTubeId(youtubeUrl);
+        if (videoId) {
+          chapter.youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+        } else {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid YouTube URL. Please provide a valid YouTube video link.',
+          });
+        }
+      } else {
+        chapter.youtubeUrl = null;
       }
-
-      const upload = await uploadBuffer(req.file.buffer, {
-        folder: 'course-videos',
-        resource_type: 'video',
-      });
-      chapter.videoUrl = upload.secure_url;
-      chapter.videoPublicId = upload.public_id;
     }
 
     await chapter.save();
@@ -224,11 +240,6 @@ exports.deleteChapter = async (req, res) => {
         success: false,
         message: 'Cannot delete chapter with sub-chapters. Please delete sub-chapters first.',
       });
-    }
-
-    // Delete video from Cloudinary
-    if (chapter.videoPublicId) {
-      await deleteResource(chapter.videoPublicId, 'video');
     }
 
     await CourseChapter.findByIdAndDelete(req.params.id);
