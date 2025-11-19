@@ -6,15 +6,19 @@ import { AuthContext } from '../Contexts/AuthContext';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 
 export default function TabLayout() {
-  const { userToken, isLoading } = useContext(AuthContext);
+  const { userToken, user, isLoading } = useContext(AuthContext);
   const router = useRouter();
 
-  // Redirect to login if not authenticated
+  // Redirect to login if not authenticated, or to profile completion if profile not completed
   useEffect(() => {
-    if (!isLoading && !userToken) {
-      router.replace('/login');
+    if (!isLoading) {
+      if (!userToken) {
+        router.replace('/login' as any);
+      } else if (user && !user.profileCompleted) {
+        router.replace('/profile-completion' as any);
+      }
     }
-  }, [userToken, isLoading]);
+  }, [userToken, user, isLoading]);
 
   // Show loading indicator while checking authentication
   if (isLoading || !userToken) {

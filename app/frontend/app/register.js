@@ -59,8 +59,12 @@ export default function Register() {
             await setUserToken(response.data.token, response.data.user);
             console.log('Token and user data saved to AsyncStorage');
 
-            // Redirect to main app immediately (tabs layout)
-            router.replace('/( tabs )/index');
+            // Redirect to profile completion if profile is not completed
+            if (!response.data.user.profileCompleted) {
+              router.replace('/profile-completion');
+            } else {
+              router.replace('/( tabs )/index');
+            }
         } catch (error) {
             console.log('Registration error:', error);
             let errorMessage = 'Something went wrong. Please try again.';

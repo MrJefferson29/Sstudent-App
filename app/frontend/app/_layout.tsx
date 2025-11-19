@@ -15,6 +15,7 @@ export default function RootLayout() {
           <Stack.Screen name="( tabs )" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="register" options={{ headerShown: false }} />
+          <Stack.Screen name="profile-completion" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" />
           <Stack.Screen name="video-details-two" options={{ headerTitle: "Video Details" }} />
           <Stack.Screen name="school-select" options={{ headerTitle: "School/ Concour Select" }} />

@@ -38,8 +38,12 @@ export default function Login() {
             // Update the AuthContext (which saves to AsyncStorage)
             await setUserToken(response.data.token, response.data.user);
             
-            // Redirect to main app immediately (tabs layout)
-            router.replace('/( tabs )/index');
+            // Redirect to profile completion if profile is not completed
+            if (!response.data.user.profileCompleted) {
+              router.replace('/profile-completion');
+            } else {
+              router.replace('/( tabs )/index');
+            }
         } catch (error) {
             console.log('Login error:', error);
             let errorMessage = 'Something went wrong. Please try again.';

@@ -238,6 +238,16 @@ export const profileAPI = {
     return response.data;
   },
 
+  // Complete profile (for new registrations)
+  completeProfile: async (school, department, matricule) => {
+    const response = await api.post('/auth/profile/complete', {
+      school,
+      department,
+      matricule,
+    });
+    return response.data;
+  },
+
   // Update profile
   updateProfile: async (formData) => {
     const response = await api.put('/auth/profile', formData, {

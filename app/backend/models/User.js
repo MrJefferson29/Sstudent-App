@@ -35,6 +35,16 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
+  matricule: {
+    type: String,
+    trim: true,
+    unique: true,
+    sparse: true, // Allow multiple null values
+  },
+  profileCompleted: {
+    type: Boolean,
+    default: false,
+  },
   role: {
     type: String,
     enum: ['admin', 'user'],

@@ -11,6 +11,8 @@ const formatUserResponse = (user) => ({
   school: user.school,
   department: user.department,
   level: user.level,
+  matricule: user.matricule,
+  profileCompleted: user.profileCompleted,
   role: user.role,
   profilePicture: user.profilePicture,
   createdAt: user.createdAt,
@@ -41,10 +43,71 @@ exports.getProfile = async (req, res) => {
   }
 };
 
+// Complete user profile (for new registrations)
+exports.completeProfile = async (req, res) => {
+  try {
+    const { school, department, matricule } = req.body;
+    const userId = req.userId;
+
+    // Validation
+    if (!school || !department || !matricule) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide school, department, and matricule number',
+      });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    // Check if matricule is already taken
+    const existingMatricule = await User.findOne({ 
+      matricule, 
+      _id: { $ne: userId } 
+    });
+    if (existingMatricule) {
+      return res.status(400).json({
+        success: false,
+        message: 'Matricule number already exists',
+      });
+    }
+
+    // Update fields
+    user.school = school;
+    user.department = department;
+    user.matricule = matricule;
+    user.profileCompleted = true;
+
+    await user.save();
+
+    // Populate school and department for response
+    await user.populate('school', 'name');
+    await user.populate('department', 'name');
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile completed successfully',
+      user: formatUserResponse(user),
+    });
+  } catch (error) {
+    console.error('Complete profile error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error completing profile',
+      error: error.message,
+    });
+  }
+};
+
 // Update user profile
 exports.updateProfile = async (req, res) => {
   try {
-    const { name, school, department, level } = req.body;
+    const { name, school, department, level, matricule } = req.body;
     const userId = req.userId;
 
     const user = await User.findById(userId);
@@ -60,6 +123,20 @@ exports.updateProfile = async (req, res) => {
     if (school !== undefined) user.school = school;
     if (department !== undefined) user.department = department;
     if (level !== undefined) user.level = level;
+    if (matricule !== undefined) {
+      // Check if matricule is already taken by another user
+      const existingMatricule = await User.findOne({ 
+        matricule, 
+        _id: { $ne: userId } 
+      });
+      if (existingMatricule) {
+        return res.status(400).json({
+          success: false,
+          message: 'Matricule number already exists',
+        });
+      }
+      user.matricule = matricule;
+    }
 
     if (req.file) {
       if (user.profilePicturePublicId) {
