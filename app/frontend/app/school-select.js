@@ -12,6 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import { schoolsAPI, concoursAPI, departmentsAPI } from "./utils/api";
 
 export default function SchoolSelect() {
   const router = useRouter();
@@ -22,45 +23,65 @@ export default function SchoolSelect() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        // Simulating API calls
-        const fetchedSchools = [
-          "Coltech",
-          "Naphpi",
-          "Faculty of Arts",
-          "Faculty of Science",
-        ];
-        const fetchedConcours = [
-          "ENSET",
-          "ENAM",
-          "Transport and Logistics",
-        ];
-
-        // Simulate a delay like fetching from an API
-        setTimeout(() => {
-          setSchools(fetchedSchools);
-          setConcours(fetchedConcours);
-          setIsLoading(false);
-        }, 10);
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        setError("Failed to load data. Please try again later.");
-        setIsLoading(false);
-      }
-    };
-
     fetchData();
   }, []);
 
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      if (activeTab === "school") {
+        const response = await schoolsAPI.getAll();
+        if (response.success) {
+          setSchools(response.data || []);
+        } else {
+          setError("Failed to load schools");
+        }
+      } else {
+        // Fetch concours - get all departments first, then fetch concours
+        const deptResponse = await departmentsAPI.getAll();
+        if (deptResponse.success && deptResponse.data.length > 0) {
+          // Get unique concours from all departments
+          const allConcours = [];
+          for (const dept of deptResponse.data) {
+            const concoursRes = await concoursAPI.getAll(dept._id);
+            if (concoursRes.success && concoursRes.data) {
+              allConcours.push(...concoursRes.data);
+            }
+          }
+          // Group by title and year to avoid duplicates
+          const uniqueConcours = Array.from(
+            new Map(allConcours.map(c => [`${c.title}-${c.year}`, c])).values()
+          );
+          setConcours(uniqueConcours);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      setError("Failed to load data. Please try again later.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [activeTab]);
+
   const handleSelection = (item) => {
     if (activeTab === "school") {
-      // Navigate to department-select screen with the selected school as a param
-      router.push(`/department-select?school=${item}`);
+      // Navigate to department-select screen with the selected school ID
+      router.push(`/department-select?schoolId=${item._id}&schoolName=${encodeURIComponent(item.name)}`);
     } else if (activeTab === "concour") {
-      // Navigate to questions screen with the selected concour as a param
-      router.push(`/questions?concour=${item}`);
+      // Navigate to concours viewer
+      router.push({
+        pathname: "/pdf-viewer",
+        params: {
+          pdfUrl: item.pdfUrl,
+          title: `${item.title} - ${item.year}`,
+        },
+      });
     }
   };
 
@@ -105,16 +126,28 @@ export default function SchoolSelect() {
       <View style={styles.itemsSection}>
         {items.map((item, index) => (
           <TouchableOpacity
-            key={index}
+            key={item._id || index}
             style={styles.card}
-            onPress={() => handleSelection(item)} // Handle the press event
+            onPress={() => handleSelection(item)}
           >
             <Ionicons
               name={activeTab === "school" ? "school-outline" : "book-outline"}
               size={24}
               color="#2563EB"
             />
-            <Text style={styles.cardText}>{item}</Text>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={styles.cardText}>
+                {activeTab === "school" ? item.name : `${item.title} (${item.year})`}
+              </Text>
+              {activeTab === "school" && item.location && (
+                <Text style={styles.cardSubtext}>{item.location}</Text>
+              )}
+              {activeTab === "concour" && item.department && (
+                <Text style={styles.cardSubtext}>
+                  {item.department.name || item.department}
+                </Text>
+              )}
+            </View>
             <Ionicons name="chevron-forward" size={20} color="#999" />
           </TouchableOpacity>
         ))}
@@ -219,11 +252,14 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   cardText: {
-    flex: 1,
-    marginLeft: 12,
     fontSize: 16,
     fontWeight: "500",
     color: "#111",
+  },
+  cardSubtext: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 4,
   },
   scrollView: {
     flex: 1,

@@ -11,7 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 export default function SubjectSelect() {
-  const { school, dept, level } = useLocalSearchParams();
+  const { schoolId, schoolName, departmentId, departmentName, level } = useLocalSearchParams();
   const router = useRouter();
 
   // Example subjects (replace with real data or fetch from API)
@@ -35,7 +35,7 @@ export default function SubjectSelect() {
 
       {/* Subtitle */}
       <Text style={styles.subtitle}>
-        Choose your subject in {level}, {dept}
+        Choose your subject in {level}, {departmentName || "Department"}
       </Text>
 
       {/* Subjects */}
@@ -47,7 +47,12 @@ export default function SubjectSelect() {
             onPress={() =>
               router.push({
                 pathname: "/questions",
-                params: { school, dept, level, subject },
+                params: {
+                  departmentId,
+                  departmentName,
+                  level,
+                  subject,
+                },
               })
             }
           >

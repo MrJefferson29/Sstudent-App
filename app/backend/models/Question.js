@@ -1,15 +1,10 @@
 const mongoose = require('mongoose');
 
 const questionSchema = new mongoose.Schema({
-  school: {
-    type: String,
-    required: [true, 'School is required'],
-    trim: true,
-  },
   department: {
-    type: String,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Department',
     required: [true, 'Department is required'],
-    trim: true,
   },
   level: {
     type: String,
@@ -46,7 +41,7 @@ const questionSchema = new mongoose.Schema({
 });
 
 // Index for efficient querying
-questionSchema.index({ school: 1, department: 1, level: 1, subject: 1, year: 1 });
+questionSchema.index({ department: 1, level: 1, subject: 1, year: 1 });
 
 module.exports = mongoose.model('Question', questionSchema);
 

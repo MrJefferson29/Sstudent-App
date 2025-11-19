@@ -1,18 +1,28 @@
 const Question = require('../models/Question');
 const Solution = require('../models/Solution');
+const Department = require('../models/Department');
 const { uploadBuffer, deleteResource } = require('../utils/cloudinary');
 
 // Upload a new question
 exports.uploadQuestion = async (req, res) => {
   try {
-    const { school, department, level, subject, year } = req.body;
+    const { department, level, subject, year } = req.body;
     const userId = req.userId; // From auth middleware
 
     // Validation
-    if (!school || !department || !level || !subject || !year) {
+    if (!department || !level || !subject || !year) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide all required fields: school, department, level, subject, year',
+        message: 'Please provide all required fields: department, level, subject, year',
+      });
+    }
+
+    // Verify department exists
+    const departmentExists = await Department.findById(department);
+    if (!departmentExists) {
+      return res.status(404).json({
+        success: false,
+        message: 'Department not found',
       });
     }
 
@@ -30,7 +40,6 @@ exports.uploadQuestion = async (req, res) => {
     });
 
     const question = await Question.create({
-      school,
       department,
       level,
       subject,
@@ -40,10 +49,15 @@ exports.uploadQuestion = async (req, res) => {
       uploadedBy: userId,
     });
 
+    const populatedQuestion = await Question.findById(question._id)
+      .populate('department', 'name school')
+      .populate('department.school', 'name')
+      .populate('uploadedBy', 'name email');
+
     res.status(201).json({
       success: true,
       message: 'Question uploaded successfully',
-      data: question,
+      data: populatedQuestion,
     });
   } catch (error) {
     console.error('Upload question error:', error);
@@ -58,20 +72,11 @@ exports.uploadQuestion = async (req, res) => {
 // Get all questions with optional filters
 exports.getAllQuestions = async (req, res) => {
   try {
-    const { school, department, level, subject, year } = req.query;
+    const { department, level, subject, year } = req.query;
     
-    // Build filter object with case-insensitive matching
+    // Build filter object
     const filter = {};
-    if (school) {
-      // Case-insensitive regex search for school (escape special regex characters)
-      const escapedSchool = school.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      filter.school = { $regex: new RegExp(`^${escapedSchool}$`, 'i') };
-    }
-    if (department) {
-      // Case-insensitive regex search for department (escape special regex characters)
-      const escapedDepartment = department.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      filter.department = { $regex: new RegExp(`^${escapedDepartment}$`, 'i') };
-    }
+    if (department) filter.department = department;
     if (level) filter.level = level;
     if (subject) {
       // Case-insensitive regex search for subject (escape special regex characters)
@@ -81,6 +86,8 @@ exports.getAllQuestions = async (req, res) => {
     if (year) filter.year = year;
 
     const questions = await Question.find(filter)
+      .populate('department', 'name school')
+      .populate('department.school', 'name')
       .populate('uploadedBy', 'name email')
       .sort({ createdAt: -1 });
 
@@ -103,6 +110,8 @@ exports.getAllQuestions = async (req, res) => {
 exports.getQuestionById = async (req, res) => {
   try {
     const question = await Question.findById(req.params.id)
+      .populate('department', 'name school')
+      .populate('department.school', 'name')
       .populate('uploadedBy', 'name email');
 
     if (!question) {

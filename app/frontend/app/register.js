@@ -110,24 +110,6 @@ export default function Register() {
                     value={confirmPassword}
                     onChangeText={setConfirmPassword}
                 />
-                <TextInput
-                    style={styles.input}
-                    placeholder="School (Optional)"
-                    value={school}
-                    onChangeText={setSchool}
-                />
-                <TextInput
-                    style={styles.input}
-                    placeholder="Department (Optional)"
-                    value={department}
-                    onChangeText={setDepartment}
-                />
-                <TextInput
-                    style={styles.input}
-                    placeholder="Level (Optional)"
-                    value={level}
-                    onChangeText={setLevel}
-                />
             </View>
             <TouchableOpacity style={styles.button} onPress={handleRegister}>
                 <Text style={styles.buttonText}>Sign up</Text>

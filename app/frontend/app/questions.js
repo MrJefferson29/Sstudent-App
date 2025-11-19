@@ -15,7 +15,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { questionsAPI, resolveAssetUrl } from "./utils/api";
 
 export default function PastQuestions() {
-  const { school, dept, level, subject } = useLocalSearchParams();
+  const { departmentId, departmentName, level, subject } = useLocalSearchParams();
   const router = useRouter();
   const [questions, setQuestions] = useState([]);
   const [groupedQuestions, setGroupedQuestions] = useState({});
@@ -26,18 +26,17 @@ export default function PastQuestions() {
   // Fetch questions from backend
   useEffect(() => {
     fetchQuestions();
-  }, [school, dept, level, subject]);
+  }, [departmentId, level, subject]);
 
   const fetchQuestions = async () => {
     try {
       setIsLoading(true);
       setError(null);
       
-      console.log('Fetching questions with filters:', { school, department: dept, level, subject });
+      console.log('Fetching questions with filters:', { department: departmentId, level, subject });
       
       const response = await questionsAPI.getAll({
-        school,
-        department: dept,
+        department: departmentId,
         level,
         subject,
       });
@@ -187,7 +186,7 @@ export default function PastQuestions() {
           <Text style={styles.title}>Past Questions</Text>
         </View>
         <Text style={styles.subtitle}>
-          {subject} - {level}, {dept}
+          {subject} - {level}, {departmentName || "Department"}
         </Text>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#2563EB" />
@@ -205,7 +204,7 @@ export default function PastQuestions() {
           <Text style={styles.title}>Past Questions</Text>
         </View>
         <Text style={styles.subtitle}>
-          {subject} - {level}, {dept}
+          {subject} - {level}, {departmentName || "Department"}
         </Text>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
@@ -229,13 +228,13 @@ export default function PastQuestions() {
           <Text style={styles.title}>Past Questions</Text>
         </View>
         <Text style={styles.subtitle}>
-          {subject} - {level}, {dept}
+          {subject} - {level}, {departmentName || "Department"}
         </Text>
         <View style={styles.emptyContainer}>
           <Ionicons name="document-text-outline" size={64} color="#9CA3AF" />
           <Text style={styles.emptyText}>No questions available</Text>
           <Text style={styles.emptySubtext}>
-            Questions for {subject} in {level}, {dept} will appear here
+            Questions for {subject} in {level}, {departmentName || "Department"} will appear here
           </Text>
         </View>
       </View>
@@ -249,7 +248,7 @@ export default function PastQuestions() {
       </View>
 
       <Text style={styles.subtitle}>
-        {subject} - {level}, {dept}
+        {subject} - {level}, {departmentName || "Department"}
       </Text>
 
       <ScrollView

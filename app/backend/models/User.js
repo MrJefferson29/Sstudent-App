@@ -22,12 +22,14 @@ const userSchema = new mongoose.Schema({
     select: false, // Don't return password by default
   },
   school: {
-    type: String,
-    trim: true,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'School',
+    default: null,
   },
   department: {
-    type: String,
-    trim: true,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Department',
+    default: null,
   },
   level: {
     type: String,

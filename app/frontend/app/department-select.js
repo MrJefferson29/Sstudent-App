@@ -1,86 +1,149 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { departmentsAPI } from "./utils/api";
 
 export default function DepartmentSelect() {
-  // get school name from route params
-  const { school } = useLocalSearchParams();
+  const { schoolId, schoolName } = useLocalSearchParams();
   const router = useRouter();
+  const [departments, setDepartments] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Example departments per school
-  const departmentsBySchool = {
-    Coltech: ["Computer Science", "Mathematics", "Physics", "Chemistry"],
-    Naphpi: ["Philosophy", "History", "Linguistics"],
-    "Faculty of Arts": ["Fine Arts", "Music", "Drama"],
-    "Faculty of Science": [
-      "Biology",
-      "Geology",
-      "Environmental Science",
-      "Statistics",
-    ],
-    "Faculty of Law": ["Civil Law", "Common Law", "International Law"],
-    "Faculty of Education": [
-      "Curriculum Studies",
-      "Educational Psychology",
-      "Guidance & Counseling",
-    ],
-    "Faculty of Engineering": [
-      "Electrical Engineering",
-      "Mechanical Engineering",
-      "Civil Engineering",
-      "Software Engineering",
-    ],
-    "Faculty of Medicine": [
-      "General Medicine",
-      "Pharmacy",
-      "Nursing",
-      "Dentistry",
-    ],
-    "School of Business": ["Accounting", "Marketing", "Management", "Finance"],
+  useEffect(() => {
+    fetchDepartments();
+  }, [schoolId]);
+
+  const fetchDepartments = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const response = await departmentsAPI.getAll(schoolId);
+      if (response.success) {
+        setDepartments(response.data || []);
+      } else {
+        setError("Failed to load departments");
+      }
+    } catch (err) {
+      console.error("Error fetching departments:", err);
+      setError("Failed to load departments. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const departments = departmentsBySchool[school] || ["General Department"];
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Departments</Text>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2563EB" />
+          <Text style={styles.loadingText}>Loading departments...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Departments</Text>
+        </View>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={fetchDepartments}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-   
         <Text style={styles.title}>Departments</Text>
         <View style={{ width: 24 }} />
       </View>
 
       {/* Subtitle */}
       <Text style={styles.subtitle}>
-        Select your department in {school}
+        Select your department in {schoolName || "School"}
       </Text>
 
       {/* Department Options */}
-      <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 20 }}>
-        {departments.map((dept, index) => (
-          <TouchableOpacity
-            key={index}
-            style={styles.card}
-            onPress={() =>
-              router.push({
-                pathname: "/level-select",
-                params: { school, dept },
-              })
-            }
-          >
-            <Ionicons name="library-outline" size={24} color="#2563EB" />
-            <Text style={styles.cardText}>{dept}</Text>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {departments.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="library-outline" size={64} color="#9CA3AF" />
+          <Text style={styles.emptyText}>No departments available</Text>
+          <Text style={styles.emptySubtext}>
+            Departments for this school will appear here
+          </Text>
+        </View>
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 20 }}>
+          {departments.map((dept) => (
+            <View key={dept._id} style={styles.departmentContainer}>
+              <TouchableOpacity
+                style={styles.card}
+                onPress={() =>
+                  router.push({
+                    pathname: "/level-select",
+                    params: {
+                      schoolId,
+                      schoolName,
+                      departmentId: dept._id,
+                      departmentName: dept.name,
+                    },
+                  })
+                }
+              >
+                <Ionicons name="library-outline" size={24} color="#2563EB" />
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.cardText}>{dept.name}</Text>
+                  {dept.description && (
+                    <Text style={styles.cardSubtext} numberOfLines={1}>
+                      {dept.description}
+                    </Text>
+                  )}
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#999" />
+              </TouchableOpacity>
+              
+              {/* Courses Button */}
+              <TouchableOpacity
+                style={styles.coursesButton}
+                onPress={() =>
+                  router.push({
+                    pathname: "/course-list",
+                    params: {
+                      departmentId: dept._id,
+                      departmentName: dept.name,
+                    },
+                  })
+                }
+              >
+                <Ionicons name="book-outline" size={18} color="#16A34A" />
+                <Text style={styles.coursesButtonText}>View Courses</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -116,10 +179,88 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   cardText: {
-    flex: 1,
-    marginLeft: 12,
     fontSize: 16,
     fontWeight: "500",
     color: "#111",
+  },
+  cardSubtext: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 4,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 100,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: "#6B7280",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 100,
+    paddingHorizontal: 20,
+  },
+  errorText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: "#EF4444",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: "#2563EB",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 100,
+    paddingHorizontal: 20,
+  },
+  emptyText: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#374151",
+    textAlign: "center",
+  },
+  emptySubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+  },
+  departmentContainer: {
+    marginBottom: 12,
+  },
+  coursesButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F0FDF4",
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 8,
+    marginHorizontal: 4,
+    justifyContent: "center",
+  },
+  coursesButtonText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#16A34A",
+    marginLeft: 6,
   },
 });

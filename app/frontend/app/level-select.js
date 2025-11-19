@@ -11,7 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 export default function LevelSelect() {
-  const { school, dept } = useLocalSearchParams();
+  const { schoolId, schoolName, departmentId, departmentName } = useLocalSearchParams();
   const router = useRouter();
 
   // Example levels
@@ -27,7 +27,7 @@ export default function LevelSelect() {
 
       {/* Subtitle */}
       <Text style={styles.subtitle}>
-        Choose your level in {dept}, {school}
+        Choose your level in {departmentName || "Department"}, {schoolName || "School"}
       </Text>
 
       {/* Level Options */}
@@ -39,7 +39,13 @@ export default function LevelSelect() {
             onPress={() =>
               router.push({
                 pathname: "/subject-select",
-                params: { school, dept, level },
+                params: {
+                  schoolId,
+                  schoolName,
+                  departmentId,
+                  departmentName,
+                  level,
+                },
               })
             }
           >

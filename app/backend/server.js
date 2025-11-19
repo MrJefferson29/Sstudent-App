@@ -102,6 +102,12 @@ const contestRoutes = require('./routes/contestRoutes');
 const voteRoutes = require('./routes/voteRoutes');
 const studyGroupRoutes = require('./routes/studyGroupRoutes');
 const liveRoutes = require('./routes/liveRoutes');
+const schoolRoutes = require('./routes/schoolRoutes');
+const departmentRoutes = require('./routes/departmentRoutes');
+const courseRoutes = require('./routes/courseRoutes');
+const concoursRoutes = require('./routes/concoursRoutes');
+const courseChapterRoutes = require('./routes/courseChapterRoutes');
+const courseCommentRoutes = require('./routes/courseCommentRoutes');
 
 app.use('/auth', authRoutes);
 app.use('/questions', questionRoutes);
@@ -112,6 +118,12 @@ app.use('/contests', contestRoutes);
 app.use('/votes', voteRoutes);
 app.use('/study-groups', studyGroupRoutes);
 app.use('/live', liveRoutes);
+app.use('/schools', schoolRoutes);
+app.use('/departments', departmentRoutes);
+app.use('/courses', courseRoutes);
+app.use('/concours', concoursRoutes);
+app.use('/course-chapters', courseChapterRoutes);
+app.use('/course-comments', courseCommentRoutes);
 
 // Health check route
 app.get('/', (req, res) => {

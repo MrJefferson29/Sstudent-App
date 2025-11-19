@@ -67,12 +67,38 @@ api.interceptors.request.use(
   }
 );
 
+// Schools API
+export const schoolsAPI = {
+  getAll: async () => {
+    const response = await api.get('/schools');
+    return response.data;
+  },
+
+  getById: async (schoolId) => {
+    const response = await api.get(`/schools/${schoolId}`);
+    return response.data;
+  },
+};
+
+// Departments API
+export const departmentsAPI = {
+  getAll: async (schoolId = null) => {
+    const params = schoolId ? `?school=${schoolId}` : '';
+    const response = await api.get(`/departments${params}`);
+    return response.data;
+  },
+
+  getById: async (departmentId) => {
+    const response = await api.get(`/departments/${departmentId}`);
+    return response.data;
+  },
+};
+
 // Questions API
 export const questionsAPI = {
   // Get all questions with optional filters
   getAll: async (filters = {}) => {
     const params = new URLSearchParams();
-    if (filters.school) params.append('school', filters.school);
     if (filters.department) params.append('department', filters.department);
     if (filters.level) params.append('level', filters.level);
     if (filters.subject) params.append('subject', filters.subject);
@@ -85,6 +111,75 @@ export const questionsAPI = {
   // Get single question with solutions
   getById: async (questionId) => {
     const response = await api.get(`/questions/${questionId}`);
+    return response.data;
+  },
+};
+
+// Courses API
+export const coursesAPI = {
+  getAll: async (departmentId = null, level = null) => {
+    const params = new URLSearchParams();
+    if (departmentId) params.append('department', departmentId);
+    if (level) params.append('level', level);
+    const response = await api.get(`/courses?${params.toString()}`);
+    return response.data;
+  },
+
+  getById: async (courseId) => {
+    const response = await api.get(`/courses/${courseId}`);
+    return response.data;
+  },
+};
+
+// Course Chapters API
+export const courseChaptersAPI = {
+  getByCourse: async (courseId) => {
+    const response = await api.get(`/course-chapters/course/${courseId}`);
+    return response.data;
+  },
+
+  getById: async (chapterId) => {
+    const response = await api.get(`/course-chapters/${chapterId}`);
+    return response.data;
+  },
+};
+
+// Course Comments API
+export const courseCommentsAPI = {
+  getByChapter: async (chapterId, type = null) => {
+    const params = type ? `?type=${type}` : '';
+    const response = await api.get(`/course-comments/chapter/${chapterId}${params}`);
+    return response.data;
+  },
+
+  create: async (commentData) => {
+    const response = await api.post('/course-comments', commentData);
+    return response.data;
+  },
+
+  update: async (commentId, commentData) => {
+    const response = await api.put(`/course-comments/${commentId}`, commentData);
+    return response.data;
+  },
+
+  delete: async (commentId) => {
+    const response = await api.delete(`/course-comments/${commentId}`);
+    return response.data;
+  },
+};
+
+// Concours API
+export const concoursAPI = {
+  getAll: async (departmentId = null, year = null) => {
+    const params = new URLSearchParams();
+    if (departmentId) params.append('department', departmentId);
+    if (year) params.append('year', year);
+    const response = await api.get(`/concours?${params.toString()}`);
+    return response.data;
+  },
+
+  getById: async (concoursId) => {
+    const response = await api.get(`/concours/${concoursId}`);
     return response.data;
   },
 };

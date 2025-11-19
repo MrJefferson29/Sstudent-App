@@ -41,14 +41,18 @@ exports.register = async (req, res) => {
       name,
       email,
       password,
-      school: school || '',
-      department: department || '',
+      school: school || null,
+      department: department || null,
       level: level || '',
       role,
     });
 
     // Generate token
     const token = generateToken(user._id);
+
+    // Populate school and department for response
+    await user.populate('school', 'name');
+    await user.populate('department', 'name');
 
     // Remove password from response
     user.password = undefined;
@@ -118,6 +122,10 @@ exports.login = async (req, res) => {
     // Generate token
     const token = generateToken(user._id);
 
+    // Populate school and department for response
+    await user.populate('school', 'name');
+    await user.populate('department', 'name');
+
     // Remove password from response
     user.password = undefined;
 
@@ -149,7 +157,10 @@ exports.login = async (req, res) => {
 // Get current user (protected route)
 exports.getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.userId);
+    const user = await User.findById(req.userId)
+      .populate('school', 'name')
+      .populate('department', 'name');
+    
     if (!user) {
       return res.status(404).json({
         success: false,

@@ -17,7 +17,11 @@ const normalizeContestant = (contestant) => {
 
 exports.getContests = async (req, res) => {
   try {
-    const contests = await Contest.find({}).sort({ isActive: -1, createdAt: -1 });
+    const contests = await Contest.find({})
+      .populate('restrictedSchool', 'name')
+      .populate('restrictedDepartment', 'name')
+      .populate('createdBy', 'name email')
+      .sort({ isActive: -1, createdAt: -1 });
     res.json({ success: true, data: contests });
   } catch (e) {
     res.status(500).json({ success: false, message: 'Error fetching contests', error: e.message });
@@ -49,11 +53,104 @@ exports.getContestants = async (req, res) => {
 // Admin: create contest
 exports.createContest = async (req, res) => {
   try {
-    const { name, description, startAt, endAt, isActive } = req.body;
-    const contest = await Contest.create({ name, description, startAt, endAt, isActive });
-    res.status(201).json({ success: true, data: contest });
+    const { name, description, startAt, endAt, isActive, votingRestriction, restrictedSchool, restrictedDepartment } = req.body;
+    const userId = req.userId;
+
+    const contestData = {
+      name,
+      description,
+      startAt,
+      endAt,
+      isActive,
+      votingRestriction: votingRestriction || 'all',
+      createdBy: userId,
+    };
+
+    // Set restriction fields based on votingRestriction
+    if (votingRestriction === 'school' && restrictedSchool) {
+      contestData.restrictedSchool = restrictedSchool;
+    } else if (votingRestriction === 'department' && restrictedDepartment) {
+      contestData.restrictedDepartment = restrictedDepartment;
+    }
+
+    const contest = await Contest.create(contestData);
+    const populatedContest = await Contest.findById(contest._id)
+      .populate('restrictedSchool', 'name')
+      .populate('restrictedDepartment', 'name')
+      .populate('createdBy', 'name email');
+
+    res.status(201).json({ success: true, data: populatedContest });
   } catch (e) {
     res.status(500).json({ success: false, message: 'Error creating contest', error: e.message });
+  }
+};
+
+// Admin: update contest
+exports.updateContest = async (req, res) => {
+  try {
+    const { contestId } = req.params;
+    const { name, description, startAt, endAt, isActive, votingRestriction, restrictedSchool, restrictedDepartment } = req.body;
+
+    const contest = await Contest.findById(contestId);
+    if (!contest) {
+      return res.status(404).json({ success: false, message: 'Contest not found' });
+    }
+
+    if (name) contest.name = name;
+    if (description !== undefined) contest.description = description;
+    if (startAt) contest.startAt = startAt;
+    if (endAt) contest.endAt = endAt;
+    if (isActive !== undefined) contest.isActive = isActive;
+    if (votingRestriction) contest.votingRestriction = votingRestriction;
+
+    // Update restriction fields
+    if (votingRestriction === 'school' && restrictedSchool) {
+      contest.restrictedSchool = restrictedSchool;
+      contest.restrictedDepartment = null;
+    } else if (votingRestriction === 'department' && restrictedDepartment) {
+      contest.restrictedDepartment = restrictedDepartment;
+      contest.restrictedSchool = null;
+    } else if (votingRestriction === 'all') {
+      contest.restrictedSchool = null;
+      contest.restrictedDepartment = null;
+    }
+
+    await contest.save();
+
+    const populatedContest = await Contest.findById(contest._id)
+      .populate('restrictedSchool', 'name')
+      .populate('restrictedDepartment', 'name')
+      .populate('createdBy', 'name email');
+
+    res.status(200).json({ success: true, data: populatedContest });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Error updating contest', error: e.message });
+  }
+};
+
+// Admin: delete contest
+exports.deleteContest = async (req, res) => {
+  try {
+    const { contestId } = req.params;
+
+    const contest = await Contest.findById(contestId);
+    if (!contest) {
+      return res.status(404).json({ success: false, message: 'Contest not found' });
+    }
+
+    // Check if contest has contestants
+    const contestantsCount = await Contestant.countDocuments({ contest: contestId });
+    if (contestantsCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete contest with existing contestants. Please delete contestants first.',
+      });
+    }
+
+    await Contest.findByIdAndDelete(contestId);
+    res.status(200).json({ success: true, message: 'Contest deleted successfully' });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Error deleting contest', error: e.message });
   }
 };
 
@@ -76,6 +173,28 @@ exports.addContestant = async (req, res) => {
     res.status(201).json({ success: true, data: normalizeContestant(contestant) });
   } catch (e) {
     res.status(500).json({ success: false, message: 'Error adding contestant', error: e.message });
+  }
+};
+
+// Admin: delete contestant
+exports.deleteContestant = async (req, res) => {
+  try {
+    const { contestantId } = req.params;
+
+    const contestant = await Contestant.findById(contestantId);
+    if (!contestant) {
+      return res.status(404).json({ success: false, message: 'Contestant not found' });
+    }
+
+    // Delete image from Cloudinary if exists
+    if (contestant.image?.publicId) {
+      await deleteResource(contestant.image.publicId, 'image');
+    }
+
+    await Contestant.findByIdAndDelete(contestantId);
+    res.status(200).json({ success: true, message: 'Contestant deleted successfully' });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Error deleting contestant', error: e.message });
   }
 };
 
