@@ -84,24 +84,37 @@ export default function PastQuestions() {
     fetchQuestions();
   };
 
-  // Open PDF link in device browser or PDF viewer app
+  // Open PDF with system default PDF viewer
   const openPDF = async (url) => {
     try {
-      const fullUrl = resolveAssetUrl(url) || url;
+      let fullUrl = resolveAssetUrl(url) || url;
 
-      console.log('Opening PDF:', fullUrl);
+      console.log('Original PDF URL:', fullUrl);
 
-      // Use PDF viewer instead of browser
-      router.push({
-        pathname: "/pdf-viewer",
-        params: {
-          pdfUrl: fullUrl,
-          title: `${subject} - Past Question`,
-        },
-      });
+      if (!fullUrl) {
+        Alert.alert("Error", "PDF URL is not available");
+        return;
+      }
+
+      // For Cloudinary URLs, the version parameter is required for access
+      // If the URL is not working, it might be a backend/upload issue
+      console.log('Opening PDF with system viewer:', fullUrl);
+
+      const supported = await Linking.canOpenURL(fullUrl);
+      if (supported) {
+        await Linking.openURL(fullUrl);
+      } else {
+        Alert.alert(
+          "PDF Unavailable",
+          "This PDF cannot be opened. It may not be properly uploaded or may have access restrictions. Please contact support or try again later."
+        );
+      }
     } catch (error) {
       console.error("Failed to open PDF:", error);
-      Alert.alert("Error", "Something went wrong while opening the PDF.");
+      Alert.alert(
+        "PDF Access Error",
+        "Unable to open the PDF. This might be due to:\n\n• File not found on server\n• Access permissions\n• Network connectivity\n\nPlease try again or contact support if the issue persists."
+      );
     }
   };
 
@@ -117,12 +130,12 @@ export default function PastQuestions() {
         // If multiple solutions, show option to choose
         if (solutions.length === 1) {
           const solution = solutions[0];
-          openSolution(solution, question);
+          await openSolution(solution, question);
         } else {
           // Show solution selection
           const solutionOptions = solutions.map((sol, index) => ({
             text: `Solution ${index + 1}${sol.youtubeUrl ? ' (Video)' : ''}${sol.pdfUrl ? ' (PDF)' : ''}`,
-            onPress: () => openSolution(sol, question),
+            onPress: async () => await openSolution(sol, question),
           }));
           
           solutionOptions.push({ text: 'Cancel', style: 'cancel' });
@@ -143,15 +156,15 @@ export default function PastQuestions() {
   };
 
   // Open solution (YouTube or PDF)
-  const openSolution = (solution, question) => {
+  const openSolution = async (solution, question) => {
     // Construct full PDF URL if it's a relative path or contains localhost
-    const pdfUrl = resolveAssetUrl(solution.pdfUrl);
+    let pdfUrl = resolveAssetUrl(solution.pdfUrl);
 
     if (solution.youtubeUrl) {
       // Extract video ID from YouTube URL
       const videoIdMatch = solution.youtubeUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/);
       const videoId = videoIdMatch ? videoIdMatch[1] : null;
-      
+
       if (videoId) {
         router.push({
           pathname: "/video-details-two",
@@ -167,14 +180,26 @@ export default function PastQuestions() {
         Alert.alert("Error", "Invalid YouTube URL");
       }
     } else if (pdfUrl) {
-      // Open PDF solution
-      router.push({
-        pathname: "/pdf-viewer",
-        params: {
-          pdfUrl: pdfUrl,
-          title: `${subject} ${question.year} Solution`,
-        },
-      });
+      // Open PDF solution with system default viewer
+      try {
+        console.log('Opening PDF solution:', pdfUrl);
+
+        const supported = await Linking.canOpenURL(pdfUrl);
+        if (supported) {
+          await Linking.openURL(pdfUrl);
+        } else {
+          Alert.alert(
+            "PDF Solution Unavailable",
+            "This PDF solution cannot be opened. It may not be properly uploaded or may have access restrictions."
+          );
+        }
+      } catch (error) {
+        console.error("Failed to open PDF solution:", error);
+        Alert.alert(
+          "PDF Solution Error",
+          "Unable to open the PDF solution. Please try again or contact support if the issue persists."
+        );
+      }
     }
   };
 
