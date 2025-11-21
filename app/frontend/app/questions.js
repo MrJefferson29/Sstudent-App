@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -89,31 +90,29 @@ export default function PastQuestions() {
     try {
       let fullUrl = resolveAssetUrl(url) || url;
 
-      console.log('Original PDF URL:', fullUrl);
+      console.log('Opening PDF URL:', fullUrl);
 
       if (!fullUrl) {
         Alert.alert("Error", "PDF URL is not available");
         return;
       }
 
-      // For Cloudinary URLs, the version parameter is required for access
-      // If the URL is not working, it might be a backend/upload issue
-      console.log('Opening PDF with system viewer:', fullUrl);
-
+      // Try to open with system default handler
       const supported = await Linking.canOpenURL(fullUrl);
       if (supported) {
+        console.log('Opening PDF with Linking.openURL');
         await Linking.openURL(fullUrl);
       } else {
         Alert.alert(
           "PDF Unavailable",
-          "This PDF cannot be opened. It may not be properly uploaded or may have access restrictions. Please contact support or try again later."
+          "This PDF cannot be opened. It may not be properly uploaded or may have access restrictions."
         );
       }
     } catch (error) {
       console.error("Failed to open PDF:", error);
       Alert.alert(
         "PDF Access Error",
-        "Unable to open the PDF. This might be due to:\n\n• File not found on server\n• Access permissions\n• Network connectivity\n\nPlease try again or contact support if the issue persists."
+        "Unable to open the PDF. Please try again or contact support if the issue persists."
       );
     }
   };
@@ -197,7 +196,7 @@ export default function PastQuestions() {
         console.error("Failed to open PDF solution:", error);
         Alert.alert(
           "PDF Solution Error",
-          "Unable to open the PDF solution. Please try again or contact support if the issue persists."
+          "Unable to open the PDF solution. Please try again or contact support."
         );
       }
     }
