@@ -25,6 +25,7 @@ const uploadBuffer = (buffer, options = {}) =>
       resource_type: 'auto',
       overwrite: false,
       unique_filename: true,
+      access_mode: 'public', // Ensure files are publicly accessible
       ...options,
     };
 
@@ -43,9 +44,25 @@ const deleteResource = async (publicId, resourceType = 'image') => {
   return cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
 };
 
+// Update access mode of an existing resource to public
+const updateAccessMode = async (publicId, resourceType = 'image') => {
+  if (!publicId) return null;
+  try {
+    return await cloudinary.uploader.explicit(publicId, {
+      resource_type: resourceType,
+      type: 'upload',
+      access_mode: 'public',
+    });
+  } catch (error) {
+    console.error('Error updating access mode:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   cloudinary,
   uploadBuffer,
   deleteResource,
+  updateAccessMode,
 };
 

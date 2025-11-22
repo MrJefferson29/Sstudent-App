@@ -57,8 +57,9 @@ exports.completeProfile = async (req, res) => {
       });
     }
 
-    const user = await User.findById(userId);
-    if (!user) {
+    // Check if user exists
+    const existingUser = await User.findById(userId);
+    if (!existingUser) {
       return res.status(404).json({
         success: false,
         message: 'User not found',
@@ -77,13 +78,29 @@ exports.completeProfile = async (req, res) => {
       });
     }
 
-    // Update fields
-    user.school = school;
-    user.department = department;
-    user.matricule = matricule;
-    user.profileCompleted = true;
+    // Update only the specified fields using findByIdAndUpdate
+    // Using runValidators: false because we're only updating optional fields
+    // and name/email are already validated during registration
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        school,
+        department,
+        matricule,
+        profileCompleted: true,
+      },
+      {
+        new: true,
+        runValidators: false, // Skip full document validation - only updating optional fields
+      }
+    );
 
-    await user.save();
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
 
     // Populate school and department for response
     await user.populate('school', 'name');

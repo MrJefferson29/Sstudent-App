@@ -11,4 +11,3 @@ export const API_URL = __DEV__
   : 'https://uba-r875.onrender.com';  // Production
 
 export default API_URL;
-

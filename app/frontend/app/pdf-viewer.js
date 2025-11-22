@@ -33,8 +33,11 @@ export default function PDFViewer() {
   };
 
 
-  // Generate simple, reliable PDF viewer HTML
+  // Generate improved PDF viewer HTML - Start with Google Docs Viewer (most reliable)
   const getPDFViewerHTML = (pdfUrl) => {
+    // Escape the PDF URL for use in JavaScript string
+    const escapedUrl = pdfUrl.replace(/'/g, "\\'").replace(/"/g, '\\"');
+    
     return `
 <!DOCTYPE html>
 <html>
@@ -60,7 +63,7 @@ export default function PDFViewer() {
       position: relative;
       background-color: #f8fafc;
     }
-    #viewer {
+    iframe {
       width: 100%;
       height: 100%;
       border: none;
@@ -127,6 +130,8 @@ export default function PDFViewer() {
       text-decoration: none;
       font-weight: 600;
       font-size: 14px;
+      margin: 4px;
+      cursor: pointer;
     }
     .error-button:hover {
       background: #2563eb;
@@ -141,65 +146,49 @@ export default function PDFViewer() {
       <div style="font-size: 14px; color: #64748b; margin-top: 4px;">This may take a few moments</div>
     </div>
 
-    <!-- Try PDF.js first, fallback to Microsoft Viewer if needed -->
+    <!-- Method 1: Google Docs Viewer (most reliable) -->
     <iframe
-      id="viewer"
-      src="https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(pdfUrl)}"
+      id="google-viewer"
+      src="https://docs.google.com/viewer?url=${encodeURIComponent(pdfUrl)}&embedded=true"
       style="width:100%;height:100%;border:none;"
-      onload="handleLoad()"
-      onerror="tryMicrosoftViewer()"
     ></iframe>
 
-    <!-- Microsoft Office Online Viewer as fallback -->
+    <!-- Method 2: PDF.js Viewer (fallback) -->
     <iframe
-      id="fallback-viewer"
-      src="https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(pdfUrl)}"
+      id="pdfjs-viewer"
+      src="https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(pdfUrl)}"
       style="width:100%;height:100%;border:none;display:none;"
-      onload="handleLoad()"
-      onerror="showError()"
+    ></iframe>
+
+    <!-- Method 3: Direct embed (fallback) -->
+    <iframe
+      id="direct-viewer"
+      src="${pdfUrl}"
+      style="width:100%;height:100%;border:none;display:none;"
+      type="application/pdf"
     ></iframe>
   </div>
 
   <script>
     var loading = document.getElementById('loading');
-    var viewer = document.getElementById('viewer');
-    var fallbackViewer = document.getElementById('fallback-viewer');
+    var googleViewer = document.getElementById('google-viewer');
+    var pdfjsViewer = document.getElementById('pdfjs-viewer');
+    var directViewer = document.getElementById('direct-viewer');
     var container = document.getElementById('pdf-container');
     var loaded = false;
     var errorShown = false;
-    var triedFallback = false;
-
-    function handleLoad() {
-      if (loaded) return;
-      loaded = true;
-      hideLoading();
-      console.log('PDF loaded successfully');
-    }
+    var currentMethod = 0;
+    var pdfUrl = '${escapedUrl}';
+    
+    var methods = [
+      { name: 'google', element: googleViewer, timeout: 8000 },
+      { name: 'pdfjs', element: pdfjsViewer, timeout: 6000 },
+      { name: 'direct', element: directViewer, timeout: 5000 }
+    ];
 
     function hideLoading() {
       if (loading) {
         loading.style.display = 'none';
-      }
-    }
-
-    function tryMicrosoftViewer() {
-      if (triedFallback) return;
-      triedFallback = true;
-      console.log('PDF.js failed, trying Microsoft Viewer...');
-
-      if (viewer) viewer.style.display = 'none';
-      if (fallbackViewer) {
-        fallbackViewer.style.display = 'block';
-        // Give Microsoft viewer time to load
-        setTimeout(function() {
-          if (!loaded) {
-            console.log('Microsoft viewer loaded or timed out');
-            loaded = true;
-            hideLoading();
-          }
-        }, 3000);
-      } else {
-        showError();
       }
     }
 
@@ -212,7 +201,7 @@ export default function PDFViewer() {
         <div class="error">
           <div class="error-title">Unable to Load PDF</div>
           <div class="error-message">
-            The PDF could not be loaded in the app. This might be due to network issues or the PDF being unavailable.
+            The PDF could not be loaded in the app. This might be due to network issues, CORS restrictions, or the PDF being unavailable.
           </div>
           <a href="javascript:void(0)" class="error-button" onclick="openPDF()">Open in Browser</a>
         </div>
@@ -223,16 +212,124 @@ export default function PDFViewer() {
       if (window.ReactNativeWebView) {
         window.ReactNativeWebView.postMessage('openPDF');
       } else {
-        window.location.href = '${pdfUrl}';
+        window.location.href = pdfUrl;
       }
     }
 
-    // Timeout - show error if PDF doesn't load within 15 seconds (gives time for fallback)
+    function checkIfBlank() {
+      // Check if the iframe content appears to be blank
+      try {
+        var iframe = methods[currentMethod].element;
+        var iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+        if (iframeDoc) {
+          var bodyText = iframeDoc.body ? iframeDoc.body.innerText || iframeDoc.body.textContent : '';
+          var bodyHTML = iframeDoc.body ? iframeDoc.body.innerHTML : '';
+          // If body is empty or only contains whitespace/loading text, might be blank
+          if (bodyText.trim().length < 10 && !bodyHTML.includes('pdf') && !bodyHTML.includes('PDF')) {
+            return true;
+          }
+        }
+      } catch (e) {
+        // Cross-origin - can't check, assume it's loading
+        return false;
+      }
+      return false;
+    }
+
+    function tryNextMethod() {
+      if (currentMethod >= methods.length) {
+        showError();
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage('pdfError');
+        }
+        return;
+      }
+
+      var method = methods[currentMethod];
+      console.log('Trying PDF viewer method:', method.name);
+      
+      // Hide previous method
+      if (currentMethod > 0) {
+        methods[currentMethod - 1].element.style.display = 'none';
+      }
+      
+      // Show current method
+      method.element.style.display = 'block';
+      var methodIndex = currentMethod;
+      currentMethod++;
+
+      // Set timeout for this method
+      setTimeout(function() {
+        if (!loaded && !errorShown && methodIndex === currentMethod - 1) {
+          // Check if blank
+          if (checkIfBlank() && methodIndex < methods.length - 1) {
+            console.log('PDF appears blank, trying next method');
+            tryNextMethod();
+          } else {
+            // Assume loaded after timeout
+            loaded = true;
+            hideLoading();
+            console.log('PDF loaded with method:', method.name);
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage('pdfLoaded');
+            }
+          }
+        }
+      }, method.timeout);
+    }
+
+    // Handle iframe load events
+    methods.forEach(function(method, index) {
+      method.element.onload = function() {
+        console.log('Iframe loaded:', method.name);
+        // Give it a moment to render
+        setTimeout(function() {
+          if (!loaded && currentMethod > index) {
+            if (!checkIfBlank() || index === methods.length - 1) {
+              loaded = true;
+              hideLoading();
+              console.log('PDF loaded with method:', method.name);
+              if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage('pdfLoaded');
+              }
+            } else if (currentMethod === index + 1) {
+              // Current method is blank, try next
+              tryNextMethod();
+            }
+          }
+        }, 2000);
+      };
+      method.element.onerror = function() {
+        console.log('Iframe error:', method.name);
+        if (currentMethod === index + 1) {
+          tryNextMethod();
+        }
+      };
+    });
+
+    // Start with Google Docs Viewer
+    setTimeout(function() {
+      if (!loaded) {
+        // Check if Google viewer loaded
+        if (checkIfBlank()) {
+          tryNextMethod();
+        } else {
+          // Give it more time
+          setTimeout(function() {
+            if (!loaded && checkIfBlank()) {
+              tryNextMethod();
+            }
+          }, 3000);
+        }
+      }
+    }, 5000);
+
+    // Overall timeout - show error if nothing loads within 25 seconds
     setTimeout(function() {
       if (!loaded && !errorShown) {
         showError();
       }
-    }, 15000);
+    }, 25000);
 
     // Handle messages from React Native
     if (window.ReactNativeWebView) {
@@ -316,38 +413,44 @@ export default function PDFViewer() {
           <WebView
             source={{ html: getPDFViewerHTML(url) }}
             style={styles.webview}
+            onLoadStart={() => {
+              setLoading(true);
+              setError(null);
+              console.log("PDF viewer loading started");
+            }}
             onLoadEnd={() => {
-              setLoading(false);
-              console.log("PDF viewer loaded");
+              // Don't hide loading immediately - let the HTML script handle it
+              console.log("PDF viewer HTML loaded");
             }}
             onError={(syntheticEvent) => {
               const { nativeEvent } = syntheticEvent;
               console.error("WebView error:", nativeEvent);
-              setError("Failed to load PDF viewer");
+              setLoading(false);
+              setError("Failed to load PDF viewer. Please try opening in browser.");
             }}
             onHttpError={(syntheticEvent) => {
               const { nativeEvent } = syntheticEvent;
               console.error("WebView HTTP error:", nativeEvent.statusCode);
               if (nativeEvent.statusCode >= 400) {
-                setError("PDF not found or access denied");
+                setLoading(false);
+                setError(`PDF not found or access denied (Error ${nativeEvent.statusCode})`);
               }
             }}
             onShouldStartLoadWithRequest={(request) => {
-              // Allow PDF viewers, blob URLs, and data URLs for proper PDF display
-              if (request.url.includes('pdf.js') ||
+              // Allow all PDF viewer services and the PDF URL
+              if (request.url.includes('docs.google.com') ||
                   request.url.includes('mozilla.github.io') ||
+                  request.url.includes('pdf.js') ||
                   request.url.includes('officeapps.live.com') ||
                   request.url.includes('view.officeapps.live.com') ||
+                  request.url === url ||
                   request.url.startsWith('blob:') ||
                   request.url.startsWith('data:') ||
-                  request.url === url) {
+                  request.url.startsWith('about:blank')) {
                 return true;
               }
-              // Block direct PDF access to prevent downloads
-              if (request.url.endsWith('.pdf') && !request.url.includes('viewer.html')) {
-                return false;
-              }
-              return true;
+              // Block navigation away from PDF viewer
+              return false;
             }}
             javaScriptEnabled={true}
             domStorageEnabled={true}
@@ -359,6 +462,12 @@ export default function PDFViewer() {
               const message = event.nativeEvent.data;
               if (message === 'openPDF') {
                 handleOpenInBrowser();
+              } else if (message === 'pdfLoaded') {
+                setLoading(false);
+                setError(null);
+              } else if (message === 'pdfError') {
+                setLoading(false);
+                setError("Failed to load PDF. Please try opening in browser.");
               }
             }}
             renderLoading={() => (

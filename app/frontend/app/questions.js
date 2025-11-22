@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Linking,
   Alert,
   ActivityIndicator,
   RefreshControl,
@@ -85,10 +84,10 @@ export default function PastQuestions() {
     fetchQuestions();
   };
 
-  // Open PDF with system default PDF viewer
-  const openPDF = async (url) => {
+  // Open PDF in the app's PDF viewer
+  const openPDF = (url) => {
     try {
-      let fullUrl = resolveAssetUrl(url) || url;
+      const fullUrl = resolveAssetUrl(url) || url;
 
       console.log('Opening PDF URL:', fullUrl);
 
@@ -97,17 +96,14 @@ export default function PastQuestions() {
         return;
       }
 
-      // Try to open with system default handler
-      const supported = await Linking.canOpenURL(fullUrl);
-      if (supported) {
-        console.log('Opening PDF with Linking.openURL');
-        await Linking.openURL(fullUrl);
-      } else {
-        Alert.alert(
-          "PDF Unavailable",
-          "This PDF cannot be opened. It may not be properly uploaded or may have access restrictions."
-        );
-      }
+      // Navigate to PDF viewer component
+      router.push({
+        pathname: "/pdf-viewer",
+        params: {
+          pdfUrl: fullUrl,
+          title: `${subject} - Past Question`,
+        },
+      });
     } catch (error) {
       console.error("Failed to open PDF:", error);
       Alert.alert(
@@ -179,19 +175,17 @@ export default function PastQuestions() {
         Alert.alert("Error", "Invalid YouTube URL");
       }
     } else if (pdfUrl) {
-      // Open PDF solution with system default viewer
+      // Open PDF solution in the app's PDF viewer
       try {
         console.log('Opening PDF solution:', pdfUrl);
 
-        const supported = await Linking.canOpenURL(pdfUrl);
-        if (supported) {
-          await Linking.openURL(pdfUrl);
-        } else {
-          Alert.alert(
-            "PDF Solution Unavailable",
-            "This PDF solution cannot be opened. It may not be properly uploaded or may have access restrictions."
-          );
-        }
+        router.push({
+          pathname: "/pdf-viewer",
+          params: {
+            pdfUrl: pdfUrl,
+            title: `${subject} ${question.year} Solution`,
+          },
+        });
       } catch (error) {
         console.error("Failed to open PDF solution:", error);
         Alert.alert(
