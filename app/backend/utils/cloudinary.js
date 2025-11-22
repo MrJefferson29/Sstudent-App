@@ -65,17 +65,39 @@ const deleteResource = async (publicId, resourceType = 'image') => {
 const updateAccessMode = async (publicId, resourceType = 'image') => {
   if (!publicId) return null;
   try {
-    // Use update API to change access mode
-    const result = await cloudinary.api.update(publicId, {
-      resource_type: resourceType,
-      access_mode: 'public',
-      invalidate: true, // Invalidate CDN cache
-    });
-    console.log(`Updated access mode for ${publicId} to public`);
-    return result;
+    // For raw files, use explicit method which is more reliable
+    if (resourceType === 'raw') {
+      const result = await cloudinary.uploader.explicit(publicId, {
+        resource_type: 'raw',
+        type: 'upload',
+        access_mode: 'public',
+        invalidate: true,
+      });
+      console.log(`Updated access mode for ${publicId} to public (using explicit)`, {
+        access_mode: result.access_mode,
+        public_id: result.public_id,
+      });
+      return result;
+    } else {
+      // For images/videos, use api.update
+      const result = await cloudinary.api.update(publicId, {
+        access_mode: 'public',
+        invalidate: true,
+      }, {
+        resource_type: resourceType,
+      });
+      console.log(`Updated access mode for ${publicId} to public (using api.update)`);
+      return result;
+    }
   } catch (error) {
     console.error(`Error updating access mode for ${publicId}:`, error);
-    throw error;
+    console.error('Error details:', {
+      message: error.message,
+      http_code: error.http_code,
+      name: error.name,
+    });
+    // Don't throw - log and continue (upload was successful)
+    return null;
   }
 };
 
