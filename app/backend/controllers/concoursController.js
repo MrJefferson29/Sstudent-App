@@ -1,6 +1,6 @@
 const Concours = require('../models/Concours');
 const Department = require('../models/Department');
-const { uploadBuffer, deleteResource } = require('../utils/cloudinary');
+const { uploadBuffer, deleteResource, updateAccessMode } = require('../utils/cloudinary');
 
 // Upload a new concours
 exports.uploadConcours = async (req, res) => {
@@ -35,7 +35,18 @@ exports.uploadConcours = async (req, res) => {
       folder: 'concours',
       resource_type: 'raw',
       format: 'pdf',
+      access_mode: 'public', // Explicitly set for PDFs
     });
+
+    // Double-check and fix access mode if needed
+    if (upload.public_id) {
+      try {
+        await updateAccessMode(upload.public_id, 'raw');
+        console.log(`Ensured concours PDF ${upload.public_id} is public`);
+      } catch (error) {
+        console.warn(`Warning: Could not verify access mode for ${upload.public_id}:`, error.message);
+      }
+    }
 
     const concours = await Concours.create({
       title,

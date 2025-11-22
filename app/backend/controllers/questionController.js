@@ -37,7 +37,20 @@ exports.uploadQuestion = async (req, res) => {
       folder: 'questions',
       resource_type: 'raw',
       format: 'pdf',
+      access_mode: 'public', // Explicitly set for PDFs
     });
+
+    // Double-check and fix access mode if needed (sometimes Cloudinary ignores it)
+    if (upload.public_id) {
+      try {
+        // Verify and ensure it's public
+        await updateAccessMode(upload.public_id, 'raw');
+        console.log(`Ensured PDF ${upload.public_id} is public`);
+      } catch (error) {
+        console.warn(`Warning: Could not verify access mode for ${upload.public_id}:`, error.message);
+        // Continue anyway - the upload succeeded
+      }
+    }
 
     const question = await Question.create({
       department,

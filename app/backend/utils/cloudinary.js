@@ -21,20 +21,35 @@ cloudinary.config({
 
 const uploadBuffer = (buffer, options = {}) =>
   new Promise((resolve, reject) => {
+    // Build upload options - ensure access_mode is always public
     const uploadOptions = {
       resource_type: 'auto',
       overwrite: false,
       unique_filename: true,
       access_mode: 'public', // Ensure files are publicly accessible
+      type: 'upload', // Explicitly set type
       ...options,
-      // Ensure access_mode is always public, even if overridden
+      // Force access_mode to public after merging options (in case it was overridden)
       access_mode: 'public',
     };
 
+    console.log('Uploading with options:', {
+      resource_type: uploadOptions.resource_type,
+      folder: uploadOptions.folder,
+      access_mode: uploadOptions.access_mode,
+      type: uploadOptions.type,
+    });
+
     const stream = cloudinary.uploader.upload_stream(uploadOptions, (err, result) => {
       if (err) {
+        console.error('Cloudinary upload error:', err);
         return reject(err);
       }
+      console.log('Upload successful:', {
+        public_id: result.public_id,
+        secure_url: result.secure_url,
+        access_mode: result.access_mode,
+      });
       return resolve(result);
     });
 
@@ -50,10 +65,9 @@ const deleteResource = async (publicId, resourceType = 'image') => {
 const updateAccessMode = async (publicId, resourceType = 'image') => {
   if (!publicId) return null;
   try {
-    // Use explicit to update the access mode
-    const result = await cloudinary.uploader.explicit(publicId, {
+    // Use update API to change access mode
+    const result = await cloudinary.api.update(publicId, {
       resource_type: resourceType,
-      type: 'upload',
       access_mode: 'public',
       invalidate: true, // Invalidate CDN cache
     });
