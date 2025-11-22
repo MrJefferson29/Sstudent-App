@@ -165,9 +165,17 @@ export default function ProfileScreen() {
         <View style={redesignStyles.section}>
             <Text style={redesignStyles.sectionTitle}>Academic Details</Text>
             <View style={redesignStyles.card}>
-                <DetailItem label="Institution" value={displayUser?.school} iconName="school-outline" />
-                <DetailItem label="Department" value={displayUser?.department} iconName="library-outline" />
-                <DetailItem label="Student Level" value={displayUser?.level} iconName="layers-outline" />
+                <DetailItem 
+                    label="Institution" 
+                    value={displayUser?.school?.name || displayUser?.school || "Not set"} 
+                    iconName="school-outline" 
+                />
+                <DetailItem 
+                    label="Department" 
+                    value={displayUser?.department?.name || displayUser?.department || "Not set"} 
+                    iconName="library-outline" 
+                />
+                <DetailItem label="Student Level" value={displayUser?.level || "Not set"} iconName="layers-outline" />
                 <TouchableOpacity 
                     style={redesignStyles.editDetailsButton}
                     onPress={() => router.push("/edit-profile")}

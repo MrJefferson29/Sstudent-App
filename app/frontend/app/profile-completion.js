@@ -94,12 +94,8 @@ export default function ProfileCompletion() {
       if (response.success) {
         // Update user in context
         await updateUser(response.user);
-        Alert.alert('Success', 'Profile completed successfully!', [
-          {
-            text: 'OK',
-            onPress: () => router.replace('/( tabs )/index'),
-          },
-        ]);
+        // Redirect to home screen immediately
+        router.replace('/');
       }
     } catch (error) {
       console.error('Error completing profile:', error);

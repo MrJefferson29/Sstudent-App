@@ -1,7 +1,7 @@
 const Question = require('../models/Question');
 const Solution = require('../models/Solution');
 const Department = require('../models/Department');
-const { uploadBuffer, deleteResource } = require('../utils/cloudinary');
+const { uploadBuffer, deleteResource, updateAccessMode } = require('../utils/cloudinary');
 
 // Upload a new question
 exports.uploadQuestion = async (req, res) => {
@@ -169,6 +169,58 @@ exports.getSubjects = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching subjects',
+      error: error.message,
+    });
+  }
+};
+
+// Fix access mode for all question PDFs (admin only)
+exports.fixAllQuestionPDFs = async (req, res) => {
+  try {
+    const User = require('../models/User');
+    const user = await User.findById(req.userId);
+    
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only admins can fix PDF access modes',
+      });
+    }
+
+    const questions = await Question.find({ pdfPublicId: { $exists: true, $ne: null } });
+    let fixed = 0;
+    let failed = 0;
+    const errors = [];
+
+    for (const question of questions) {
+      try {
+        await updateAccessMode(question.pdfPublicId, 'raw');
+        fixed++;
+        console.log(`Fixed PDF: ${question.pdfPublicId}`);
+      } catch (error) {
+        failed++;
+        errors.push({
+          questionId: question._id,
+          publicId: question.pdfPublicId,
+          error: error.message,
+        });
+        console.error(`Failed to fix PDF ${question.pdfPublicId}:`, error.message);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Fixed ${fixed} PDFs. ${failed} failed.`,
+      fixed,
+      failed,
+      total: questions.length,
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (error) {
+    console.error('Fix PDFs error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fixing PDFs',
       error: error.message,
     });
   }

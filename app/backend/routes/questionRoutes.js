@@ -6,6 +6,7 @@ const {
   getQuestionById,
   deleteQuestion,
   getSubjects,
+  fixAllQuestionPDFs,
 } = require('../controllers/questionController');
 const { protect } = require('../middleware/authMiddleware');
 const upload = require('../middleware/upload');
@@ -18,6 +19,9 @@ router.get('/:id', getQuestionById);
 // Protected routes (require authentication)
 router.post('/', protect, upload.single('pdf'), uploadQuestion);
 router.delete('/:id', protect, deleteQuestion);
+
+// Admin route to fix all PDF access modes
+router.post('/fix-pdfs', protect, fixAllQuestionPDFs);
 
 module.exports = router;
 
