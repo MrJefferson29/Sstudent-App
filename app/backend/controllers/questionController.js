@@ -143,6 +143,37 @@ exports.getQuestionById = async (req, res) => {
   }
 };
 
+// Get unique subjects for a department and level
+exports.getSubjects = async (req, res) => {
+  try {
+    const { department, level } = req.query;
+
+    // Build filter object
+    const filter = {};
+    if (department) filter.department = department;
+    if (level) filter.level = level;
+
+    // Get distinct subjects for the given department and level
+    const subjects = await Question.distinct('subject', filter);
+
+    // Sort subjects alphabetically
+    const sortedSubjects = subjects.sort((a, b) => a.localeCompare(b));
+
+    res.status(200).json({
+      success: true,
+      count: sortedSubjects.length,
+      data: sortedSubjects,
+    });
+  } catch (error) {
+    console.error('Get subjects error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching subjects',
+      error: error.message,
+    });
+  }
+};
+
 // Delete a question (only by uploader or admin)
 exports.deleteQuestion = async (req, res) => {
   try {

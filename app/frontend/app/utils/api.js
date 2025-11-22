@@ -108,6 +108,16 @@ export const questionsAPI = {
     return response.data;
   },
 
+  // Get unique subjects for a department and level
+  getSubjects: async (departmentId, level) => {
+    const params = new URLSearchParams();
+    if (departmentId) params.append('department', departmentId);
+    if (level) params.append('level', level);
+
+    const response = await api.get(`/questions/subjects?${params.toString()}`);
+    return response.data;
+  },
+
   // Get single question with solutions
   getById: async (questionId) => {
     const response = await api.get(`/questions/${questionId}`);

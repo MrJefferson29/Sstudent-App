@@ -5,11 +5,13 @@ const {
   getAllQuestions,
   getQuestionById,
   deleteQuestion,
+  getSubjects,
 } = require('../controllers/questionController');
 const { protect } = require('../middleware/authMiddleware');
 const upload = require('../middleware/upload');
 
 // Public routes
+router.get('/subjects', getSubjects); // Get unique subjects - must be before /:id route
 router.get('/', getAllQuestions);
 router.get('/:id', getQuestionById);
 
