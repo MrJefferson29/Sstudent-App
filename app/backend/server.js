@@ -108,6 +108,7 @@ const courseRoutes = require('./routes/courseRoutes');
 const concoursRoutes = require('./routes/concoursRoutes');
 const courseChapterRoutes = require('./routes/courseChapterRoutes');
 const courseCommentRoutes = require('./routes/courseCommentRoutes');
+const chatRoutes = require('./routes/chatRoutes');
 const skillRoutes = require('./routes/skillRoutes');
 
 app.use('/auth', authRoutes);
@@ -125,6 +126,7 @@ app.use('/courses', courseRoutes);
 app.use('/concours', concoursRoutes);
 app.use('/course-chapters', courseChapterRoutes);
 app.use('/course-comments', courseCommentRoutes);
+app.use('/chat', chatRoutes);
 app.use('/skills', skillRoutes);
 
 // Health check route
@@ -178,6 +180,7 @@ const PORT = process.env.PORT || 5000;
 const StudyGroup = require('./models/StudyGroup');
 const GroupMessage = require('./models/GroupMessage');
 const LiveMessage = require('./models/LiveMessage');
+const ChatMessage = require('./models/ChatMessage');
 
 io.on('connection', (socket) => {
   // Join a group room
@@ -261,6 +264,46 @@ io.on('connection', (socket) => {
       socket.to(room).emit('typing_live', { username: username || 'Someone' });
     } catch (err) {
       console.error('typing_live error:', err);
+    }
+  });
+
+  // --- Video & Course chat ---
+  socket.on('join_chat', ({ room }) => {
+    try {
+      if (!room) return;
+      socket.join(room);
+    } catch (err) {
+      console.error('join_chat error:', err);
+    }
+  });
+
+  socket.on('chat_message', async ({ room, resourceType, resourceId, text, userId, username, isQuestion }) => {
+    try {
+      if (!room || !resourceType || !resourceId || !text?.trim()) return;
+
+      const saved = await ChatMessage.create({
+        room,
+        resourceType,
+        resourceId,
+        text: text.trim(),
+        user: userId || null,
+        username: username || 'Learner',
+        isQuestion: Boolean(isQuestion),
+      });
+
+      const payload = {
+        id: saved._id.toString(),
+        resourceType: saved.resourceType,
+        resourceId: saved.resourceId,
+        text: saved.text,
+        username: saved.username,
+        isQuestion: saved.isQuestion,
+        createdAt: saved.createdAt,
+      };
+
+      io.to(room).emit('chat_message', payload);
+    } catch (err) {
+      console.error('chat_message error:', err);
     }
   });
 });

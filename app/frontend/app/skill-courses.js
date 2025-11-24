@@ -12,11 +12,12 @@ import {
   Linking,
   RefreshControl,
 } from "react-native";
+import axios from "axios";
 import { useRouter } from "expo-router";
 import { DrawerLayoutAndroid } from "react-native-gesture-handler";
 import { Ionicons } from "@expo/vector-icons";
 import { AuthContext } from "./Contexts/AuthContext";
-import { skillsAPI, resolveAssetUrl } from "./utils/api";
+import { resolveAssetUrl } from "./utils/api";
 
 const Skills = () => {
   const { userToken, userEmail } = useContext(AuthContext);
@@ -36,11 +37,11 @@ const Skills = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await skillsAPI.getAll();
-      if (response.success) {
-        setSkills(response.data || []);
-      } else {
-        setError("Failed to load skills");
+      const response = await axios.post("https://ficedu-payment.onrender.com/courses/get-all");
+      const data = response.data?.data || [];
+      setSkills(data);
+      if (!Array.isArray(data) || data.length === 0) {
+        console.log("No skills/courses returned from remote service");
       }
     } catch (err) {
       console.error("Error fetching skills:", err);
@@ -55,6 +56,22 @@ const Skills = () => {
     setRefreshing(true);
     await fetchSkills();
     setRefreshing(false);
+  };
+
+  const handleCoursePress = (course) => {
+    const courseId = course._id || course.id || course.courseId;
+    if (!courseId) {
+      Alert.alert("Unavailable", "Course identifier is missing. Please try another course.");
+      return;
+    }
+    const heading = course.name || course.title || "Skill Course";
+    router.push({
+      pathname: "/chapters/[id]",
+      params: {
+        id: courseId,
+        heading,
+      },
+    });
   };
 
   // Drawer layout with header
@@ -130,24 +147,24 @@ const Skills = () => {
           keyExtractor={(item) => item._id}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           renderItem={({ item }) => (
-            <Pressable
-              onPress={() => {
-                // Navigate to skill details or chapters if needed
-                // For now, just show an alert
-                Alert.alert(item.name, item.description || `Category: ${item.category || 'N/A'}`);
-              }}
-            >
+            <Pressable onPress={() => handleCoursePress(item)}>
               <View style={styles.courseWrapper}>
-                {item.thumbnail?.url ? (
-                  <Image 
-                    source={{ uri: resolveAssetUrl(item.thumbnail.url) }} 
-                    style={styles.courseImage} 
-                  />
-                ) : (
+                {(() => {
+                  const imageUri = item.thumbnail?.url || item.images?.[0];
+                  if (imageUri) {
+                    return (
+                      <Image
+                        source={{ uri: resolveAssetUrl(imageUri) || imageUri }}
+                        style={styles.courseImage}
+                      />
+                    );
+                  }
+                  return (
                   <View style={[styles.courseImage, styles.placeholderImage]}>
                     <Ionicons name="construct-outline" size={48} color="#9CA3AF" />
                   </View>
-                )}
+                  );
+                })()}
                 <View style={styles.overlay}>
                   <Text style={styles.courseName}>{item.name}</Text>
                   {item.category && (

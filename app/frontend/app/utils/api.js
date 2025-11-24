@@ -335,5 +335,18 @@ export const skillsAPI = {
   },
 };
 
+// Chat API
+export const chatAPI = {
+  getMessages: async (resourceType, resourceId, limit = 100) => {
+    const response = await api.get(`/chat/${resourceType}/${resourceId}?limit=${limit}`);
+    return response.data;
+  },
+
+  createMessage: async (payload) => {
+    const response = await api.post('/chat', payload);
+    return response.data;
+  },
+};
+
 export default api;
 

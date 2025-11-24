@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Constants from 'expo-constants';
 import axios from 'axios';
-import io from 'socket.io-client';
+import { io } from 'socket.io-client';
 
 // --- Message Bubble Component ---
 const MessageBubble = React.memo(({ msg, myUsername }) => {
