@@ -54,6 +54,7 @@ export default function HomeScreen() {
                 <ActionCard icon="school-outline" label="Scholarships" route="/scholarship" />
                 <ActionCard icon="cart-outline" label="Market" route="market" />
                 <ActionCard icon="construct-outline" label="Skills" route="/skill-courses" />
+                <ActionCard icon="radio-outline" label="Live Sessions" route="/live-sessions" />
                 <ActionCard icon="briefcase-outline" label="Internships" route="/internships" />
                 <ActionCard icon="business-outline" label="Jobs" route="/jobs" />
             </View>

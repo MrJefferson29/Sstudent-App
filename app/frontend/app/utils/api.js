@@ -348,5 +348,20 @@ export const chatAPI = {
   },
 };
 
+// Live Sessions API
+export const liveSessionsAPI = {
+  getAll: async (params = {}) => {
+    const search = new URLSearchParams(params);
+    const query = search.toString();
+    const response = await api.get(`/live-sessions${query ? `?${query}` : ''}`);
+    return response.data;
+  },
+
+  getById: async (sessionId) => {
+    const response = await api.get(`/live-sessions/${sessionId}`);
+    return response.data;
+  },
+};
+
 export default api;
 

@@ -109,6 +109,7 @@ const concoursRoutes = require('./routes/concoursRoutes');
 const courseChapterRoutes = require('./routes/courseChapterRoutes');
 const courseCommentRoutes = require('./routes/courseCommentRoutes');
 const chatRoutes = require('./routes/chatRoutes');
+const liveSessionRoutes = require('./routes/liveSessionRoutes');
 const skillRoutes = require('./routes/skillRoutes');
 
 app.use('/auth', authRoutes);
@@ -127,6 +128,7 @@ app.use('/concours', concoursRoutes);
 app.use('/course-chapters', courseChapterRoutes);
 app.use('/course-comments', courseCommentRoutes);
 app.use('/chat', chatRoutes);
+app.use('/live-sessions', liveSessionRoutes);
 app.use('/skills', skillRoutes);
 
 // Health check route
