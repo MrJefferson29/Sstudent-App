@@ -12,47 +12,48 @@ import {
   Linking,
   RefreshControl,
 } from "react-native";
-import axios from "axios";
 import { useRouter } from "expo-router";
 import { DrawerLayoutAndroid } from "react-native-gesture-handler";
 import { Ionicons } from "@expo/vector-icons";
-import { AuthContext } from "./Contexts/AuthContext"; // Adjust path if needed
+import { AuthContext } from "./Contexts/AuthContext";
+import { skillsAPI, resolveAssetUrl } from "./utils/api";
 
 const Skills = () => {
-  // Retrieve user info (kept for general app context, but not used for access control)
   const { userToken, userEmail } = useContext(AuthContext);
   
-  const [courses, setCourses] = useState([]);
+  const [skills, setSkills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  // Removed paymentFound state
   const [refreshing, setRefreshing] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    // Only fetch courses; payment check logic is removed
-    fetchCourses();
-  }, []); // userEmail removed from dependency array
+    fetchSkills();
+  }, []);
 
-  // Removed checkPaymentStatus function
-
-  // Fetch courses from the backend
-  const fetchCourses = async () => {
+  // Fetch skills from the backend
+  const fetchSkills = async () => {
     try {
-      const response = await axios.post("https://ficedu-payment.onrender.com/courses/get-all");
-      setCourses(response.data.data);
+      setLoading(true);
+      setError(null);
+      const response = await skillsAPI.getAll();
+      if (response.success) {
+        setSkills(response.data || []);
+      } else {
+        setError("Failed to load skills");
+      }
     } catch (err) {
-      setError("Failed to load courses");
+      console.error("Error fetching skills:", err);
+      setError("Failed to load skills. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Pull-to-refresh handler: only refreshes courses list
+  // Pull-to-refresh handler
   const onRefresh = async () => {
     setRefreshing(true);
-    // Only fetching courses, no payment check
-    await fetchCourses(); 
+    await fetchSkills();
     setRefreshing(false);
   };
 
@@ -104,34 +105,58 @@ const Skills = () => {
   return (
     <DrawerWithHeader>
       <View style={styles.contentContainer}>
-        {/* Payment banner removed here */}
+        {error && !loading && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={fetchSkills}>
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-        {/* Courses List with pull-to-refresh */}
+        {skills.length === 0 && !loading && !error && (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="construct-outline" size={64} color="#9CA3AF" />
+            <Text style={styles.emptyText}>No skills available</Text>
+            <Text style={styles.emptySubtext}>
+              Skills will appear here once they are added by administrators
+            </Text>
+          </View>
+        )}
+
+        {/* Skills List with pull-to-refresh */}
         <FlatList
-          data={courses}
+          data={skills}
           keyExtractor={(item) => item._id}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           renderItem={({ item }) => (
             <Pressable
               onPress={() => {
-                // Payment check and access denial removed. Course access is granted.
-                router.push({
-                  pathname: `/chapters/[id]`,
-                  params: { id: item._id, heading: item.name },
-                });
+                // Navigate to skill details or chapters if needed
+                // For now, just show an alert
+                Alert.alert(item.name, item.description || `Category: ${item.category || 'N/A'}`);
               }}
             >
               <View style={styles.courseWrapper}>
-                <Image source={{ uri: item.images[0] }} style={styles.courseImage} />
-                {/* Lock overlay removed */}
+                {item.thumbnail?.url ? (
+                  <Image 
+                    source={{ uri: resolveAssetUrl(item.thumbnail.url) }} 
+                    style={styles.courseImage} 
+                  />
+                ) : (
+                  <View style={[styles.courseImage, styles.placeholderImage]}>
+                    <Ionicons name="construct-outline" size={48} color="#9CA3AF" />
+                  </View>
+                )}
                 <View style={styles.overlay}>
                   <Text style={styles.courseName}>{item.name}</Text>
-                  <Text style={styles.category}>{item.category}</Text>
+                  {item.category && (
+                    <Text style={styles.category}>{item.category}</Text>
+                  )}
                 </View>
               </View>
             </Pressable>
           )}
-          // Adding a footer component that occupies 100 units of space
           ListFooterComponent={<View style={{ height: 100 }} />}
         />
       </View>
@@ -195,7 +220,11 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 150,
   },
-  // Removed lockOverlay style
+  placeholderImage: {
+    backgroundColor: "#E5E7EB",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   overlay: {
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     padding: 10,
@@ -215,6 +244,50 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 100,
+  },
+  errorText: {
+    fontSize: 16,
+    color: "#EF4444",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: "#2563EB",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 100,
+    paddingHorizontal: 20,
+  },
+  emptyText: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#374151",
+    textAlign: "center",
+  },
+  emptySubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
   },
 });
 

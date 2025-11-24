@@ -320,5 +320,20 @@ export const votesAPI = {
   },
 };
 
+// Skills API
+export const skillsAPI = {
+  getAll: async (category = null) => {
+    const params = new URLSearchParams();
+    if (category) params.append('category', category);
+    const response = await api.get(`/skills?${params.toString()}`);
+    return response.data;
+  },
+
+  getById: async (skillId) => {
+    const response = await api.get(`/skills/${skillId}`);
+    return response.data;
+  },
+};
+
 export default api;
 
