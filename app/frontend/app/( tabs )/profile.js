@@ -10,12 +10,13 @@ import {
   Alert,
   StatusBar,
   Platform,
+  RefreshControl,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 // Assuming AuthContext and profileAPI are defined elsewhere
 import { AuthContext } from "../Contexts/AuthContext";
-import { profileAPI, resolveAssetUrl } from "../utils/api";
+import { profileAPI, resolveAssetUrl, departmentsAPI, schoolsAPI } from "../utils/api";
 
 // --- Custom Components ---
 
@@ -55,6 +56,26 @@ const DetailItem = React.memo(({ label, value, iconName }) => (
   </View>
 ));
 
+// --- Helper Functions ---
+const isObjectIdString = (value) =>
+  typeof value === "string" && /^[a-f0-9]{24}$/i.test(value);
+
+const getReadableName = (value) => {
+  if (!value) return "Not set";
+  if (typeof value === "object") {
+    return value?.name || value?.label || value?.title || "Not set";
+  }
+  return isObjectIdString(value) ? "Not set" : value;
+};
+
+const formatLevelValue = (value) => {
+  if (!value) return "Not set";
+  if (typeof value === "object") {
+    return value?.name || value?.label || value?.title || "Not set";
+  }
+  return isObjectIdString(value) ? "Not set" : value;
+};
+
 
 // --- Main Screen Component ---
 
@@ -63,12 +84,22 @@ export default function ProfileScreen() {
   const { user, logout, updateUser } = useContext(AuthContext);
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const [academicNames, setAcademicNames] = useState({
+    school: "Not set",
+    department: "Not set",
+  });
 
   // --- Data Fetching Logic (Simplified) ---
 
-  const fetchProfile = useCallback(async () => {
+  const fetchProfile = useCallback(async (options = { silent: false }) => {
+    const { silent } = options;
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
+      setError("");
       const profileResponse = await profileAPI.getProfile();
 
       if (profileResponse.success) {
@@ -77,14 +108,111 @@ export default function ProfileScreen() {
       }
     } catch (error) {
       console.error("Error fetching profile:", error);
+      setError("Unable to load profile right now. Pull to refresh to try again.");
       if (user) setProfileData(user);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
+      setRefreshing(false);
     }
   }, [user, updateUser]);
 
   useEffect(() => {
     fetchProfile();
+  }, [fetchProfile]);
+
+  useEffect(() => {
+    const target = profileData || user;
+    if (!target) return;
+
+    let isMounted = true;
+
+    const resolveNames = async () => {
+      const nextNames = {
+        school: getReadableName(target.school),
+        department: getReadableName(target.department),
+      };
+
+      const requests = [];
+
+      const shouldFetchSchool =
+        (typeof target.school === "string" && isObjectIdString(target.school)) ||
+        (typeof target.school === "object" &&
+          !target.school?.name &&
+          target.school?._id &&
+          isObjectIdString(target.school._id));
+
+      if (shouldFetchSchool) {
+        const schoolId =
+          typeof target.school === "string"
+            ? target.school
+            : target.school?._id;
+        if (schoolId && isObjectIdString(schoolId)) {
+        requests.push(
+          schoolsAPI
+            .getById(schoolId)
+            .then((response) => {
+              if (response?.success) {
+                nextNames.school =
+                  response.data?.school?.name ||
+                  response.data?.name ||
+                  nextNames.school;
+              }
+            })
+            .catch(() => null)
+        );
+        }
+      }
+
+      const shouldFetchDepartment =
+        (typeof target.department === "string" &&
+          isObjectIdString(target.department)) ||
+        (typeof target.department === "object" &&
+          !target.department?.name &&
+          target.department?._id &&
+          isObjectIdString(target.department._id));
+
+      const departmentId =
+        typeof target.department === "string"
+          ? target.department
+          : target.department?._id;
+
+      if (shouldFetchDepartment && departmentId && isObjectIdString(departmentId)) {
+        requests.push(
+          departmentsAPI
+            .getById(departmentId)
+            .then((response) => {
+              if (response?.success) {
+                nextNames.department =
+                  response.data?.department?.name ||
+                  response.data?.name ||
+                  nextNames.department;
+              }
+            })
+            .catch(() => null)
+        );
+      }
+
+      if (requests.length > 0) {
+        await Promise.all(requests);
+      }
+
+      if (isMounted) {
+        setAcademicNames(nextNames);
+      }
+    };
+
+    resolveNames();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [profileData, user]);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchProfile({ silent: true });
   }, [fetchProfile]);
 
   // --- Logout Handler ---
@@ -109,6 +237,23 @@ export default function ProfileScreen() {
 
   // --- Derived/Display Values ---
   const displayUser = profileData || user;
+  const stats = [
+    {
+      label: "Level",
+      value: formatLevelValue(displayUser?.level),
+      icon: "layers-outline",
+    },
+    {
+      label: "Department",
+      value: academicNames.department,
+      icon: "library-outline",
+    },
+    {
+      label: "Matricule",
+      value: displayUser?.matricule || "Not set",
+      icon: "id-card-outline",
+    },
+  ];
   
   if (loading && !displayUser) {
     return (
@@ -128,9 +273,24 @@ export default function ProfileScreen() {
   return (
     <View style={redesignStyles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
-      
-      <ScrollView showsVerticalScrollIndicator={false}>
-        
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={["#10B981"]}
+          />
+        }
+      >
+        {error ? (
+          <View style={redesignStyles.errorBanner}>
+            <Ionicons name="warning-outline" size={18} color="#B45309" />
+            <Text style={redesignStyles.errorText}>{error}</Text>
+          </View>
+        ) : null}
+
         {/* --- 1. Profile Header (Flat & Clean) --- */}
         <View style={redesignStyles.header}>
           <Text style={redesignStyles.headerTitle}>My Profile</Text>
@@ -165,17 +325,20 @@ export default function ProfileScreen() {
         <View style={redesignStyles.section}>
             <Text style={redesignStyles.sectionTitle}>Academic Details</Text>
             <View style={redesignStyles.card}>
-                <DetailItem 
-                    label="Institution" 
-                    value={displayUser?.school?.name || displayUser?.school || "Not set"} 
-                    iconName="school-outline" 
+                <View style={redesignStyles.statsRow}>
+                  {stats.map((item) => (
+                    <View key={item.label} style={redesignStyles.statCard}>
+                      <Ionicons name={item.icon} size={16} color="#6B7280" />
+                      <Text style={redesignStyles.statValue}>{item.value}</Text>
+                      <Text style={redesignStyles.statLabel}>{item.label}</Text>
+                    </View>
+                  ))}
+                </View>
+                <DetailItem
+                    label="Institution"
+                    value={academicNames.school}
+                    iconName="school-outline"
                 />
-                <DetailItem 
-                    label="Department" 
-                    value={displayUser?.department?.name || displayUser?.department || "Not set"} 
-                    iconName="library-outline" 
-                />
-                <DetailItem label="Student Level" value={displayUser?.level || "Not set"} iconName="layers-outline" />
                 <TouchableOpacity 
                     style={redesignStyles.editDetailsButton}
                     onPress={() => router.push("/edit-profile")}
@@ -200,11 +363,13 @@ export default function ProfileScreen() {
                     title="Privacy & Data"
                     iconName="shield-checkmark-outline"
                     iconColor="#3B82F6"
+                    onPress={() => Alert.alert("Privacy", "Privacy settings will be available soon.")}
                 />
                 <MenuItem
                     title="Notifications"
                     iconName="notifications-outline"
                     iconColor="#6366F1"
+                    onPress={() => Alert.alert("Notifications", "Notification preferences will be available soon.")}
                 />
             </View>
         </View>
@@ -248,6 +413,25 @@ const redesignStyles = StyleSheet.create({
   },
   centerContent: { justifyContent: "center", alignItems: "center" },
   loadingText: { marginTop: 10, color: "#6B7280", fontSize: 14 },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 20,
+    marginTop: 16,
+    backgroundColor: "#FEF3C7",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+  },
+  errorText: {
+    flex: 1,
+    color: "#92400E",
+    fontSize: 13,
+    fontWeight: "600",
+  },
   
 // --- Header ---
   header: {
@@ -326,6 +510,36 @@ const redesignStyles = StyleSheet.create({
     fontWeight: '700',
     color: '#4B5563', // Slightly muted title color
     marginBottom: 8,
+  },
+  statsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+    gap: 10,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    alignItems: "flex-start",
+    justifyContent: "center",
+    gap: 4,
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  statLabel: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontWeight: "500",
+    textTransform: "uppercase",
   },
   card: { 
     backgroundColor: "#fff", 
