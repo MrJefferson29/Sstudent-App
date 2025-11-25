@@ -1,7 +1,7 @@
 const Question = require('../models/Question');
 const Solution = require('../models/Solution');
 const Department = require('../models/Department');
-const { uploadBuffer, deleteResource, updateAccessMode } = require('../utils/cloudinary');
+const { uploadBuffer, deleteResource, updateAccessMode, getSignedUrl, getAccessibleUrl } = require('../utils/cloudinary');
 
 // Upload a new question
 exports.uploadQuestion = async (req, res) => {
@@ -38,6 +38,7 @@ exports.uploadQuestion = async (req, res) => {
       resource_type: 'raw',
       format: 'pdf',
       access_mode: 'public', // Explicitly set for PDFs
+      type: 'upload', // Ensure type is 'upload' (not 'authenticated' or 'private')
     });
 
     // Double-check and fix access mode if needed (sometimes Cloudinary ignores it)
@@ -234,6 +235,50 @@ exports.fixAllQuestionPDFs = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fixing PDFs',
+      error: error.message,
+    });
+  }
+};
+
+// Get signed URL for a question PDF (fallback if direct URL doesn't work)
+exports.getSignedPdfUrl = async (req, res) => {
+  try {
+    const question = await Question.findById(req.params.id);
+
+    if (!question) {
+      return res.status(404).json({
+        success: false,
+        message: 'Question not found',
+      });
+    }
+
+    if (!question.pdfPublicId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Question does not have a PDF',
+      });
+    }
+
+    // Try to get an accessible URL (public or signed)
+    const accessibleUrl = await getAccessibleUrl(question.pdfPublicId, 'raw');
+
+    if (!accessibleUrl) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to generate accessible URL',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      url: accessibleUrl,
+      isSigned: accessibleUrl.includes('signature='), // Check if it's a signed URL
+    });
+  } catch (error) {
+    console.error('Get signed PDF URL error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error generating PDF URL',
       error: error.message,
     });
   }

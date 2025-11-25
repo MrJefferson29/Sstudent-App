@@ -1,28 +1,63 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, StyleSheet, Dimensions, Text, TouchableOpacity, Linking, Alert, ActivityIndicator, Platform } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { WebView } from "react-native-webview";
 import { Ionicons } from "@expo/vector-icons";
-import { resolveAssetUrl } from "./utils/api";
+import { resolveAssetUrl, questionsAPI } from "./utils/api";
 
 export default function PDFViewer() {
-  const { file, pdfUrl, title } = useLocalSearchParams();
+  const { file, pdfUrl, title, questionId } = useLocalSearchParams();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [finalUrl, setFinalUrl] = useState(null);
+  const [urlError, setUrlError] = useState(false);
 
   // Use pdfUrl if provided, otherwise use file
   const rawUrl = pdfUrl || file;
   const resolvedUrl = resolveAssetUrl(rawUrl);
-  let url = resolvedUrl || rawUrl;
+  let initialUrl = resolvedUrl || rawUrl;
+
+  // Try to get signed URL if we have a questionId and the direct URL fails
+  useEffect(() => {
+    const fetchSignedUrl = async () => {
+      if (questionId && urlError && !finalUrl) {
+        try {
+          console.log('Attempting to get signed URL for question:', questionId);
+          const response = await questionsAPI.getSignedUrl(questionId);
+          if (response.success && response.url) {
+            console.log('Got signed URL:', response.url);
+            setFinalUrl(response.url);
+            setUrlError(false);
+            setError(null);
+          }
+        } catch (err) {
+          console.error('Error fetching signed URL:', err);
+        }
+      }
+    };
+
+    fetchSignedUrl();
+  }, [questionId, urlError, finalUrl]);
+
+  // Set initial URL
+  useEffect(() => {
+    if (initialUrl && !finalUrl) {
+      setFinalUrl(initialUrl);
+    }
+  }, [initialUrl]);
+
+  const url = finalUrl || initialUrl;
 
   console.log('PDF URL:', url);
+  console.log('Question ID:', questionId);
 
   const handleOpenInBrowser = async () => {
     try {
-      const supported = await Linking.canOpenURL(url);
+      const urlToOpen = finalUrl || url;
+      const supported = await Linking.canOpenURL(urlToOpen);
       if (supported) {
-        await Linking.openURL(url);
+        await Linking.openURL(urlToOpen);
       } else {
         Alert.alert("Error", "Cannot open this PDF link.");
       }
@@ -408,10 +443,11 @@ export default function PDFViewer() {
       )}
 
       {/* PDF Viewer */}
-      {!error && (
+      {!error && url && (
         <View style={styles.pdfContainer}>
           <WebView
             source={{ html: getPDFViewerHTML(url) }}
+            key={url} // Force re-render when URL changes
             style={styles.webview}
             onLoadStart={() => {
               setLoading(true);
@@ -425,12 +461,26 @@ export default function PDFViewer() {
             onError={(syntheticEvent) => {
               const { nativeEvent } = syntheticEvent;
               console.error("WebView error:", nativeEvent);
-              setLoading(false);
-              setError("Failed to load PDF viewer. Please try opening in browser.");
+              // If we have a questionId, try to get signed URL
+              if (questionId && !urlError) {
+                setUrlError(true);
+                console.log('WebView error, will try signed URL');
+              } else {
+                setLoading(false);
+                setError("Failed to load PDF viewer. Please try opening in browser.");
+              }
             }}
             onHttpError={(syntheticEvent) => {
               const { nativeEvent } = syntheticEvent;
               console.error("WebView HTTP error:", nativeEvent.statusCode);
+              if (nativeEvent.statusCode === 401 || nativeEvent.statusCode === 403) {
+                // Unauthorized or Forbidden - try signed URL if we have questionId
+                if (questionId && !urlError) {
+                  setUrlError(true);
+                  console.log('401/403 error, will try signed URL');
+                  return;
+                }
+              }
               if (nativeEvent.statusCode >= 400) {
                 setLoading(false);
                 setError(`PDF not found or access denied (Error ${nativeEvent.statusCode})`);

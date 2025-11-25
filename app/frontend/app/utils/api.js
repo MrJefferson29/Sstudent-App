@@ -96,6 +96,12 @@ export const departmentsAPI = {
 
 // Questions API
 export const questionsAPI = {
+  // Get signed URL for a question PDF (fallback if direct URL doesn't work)
+  getSignedUrl: async (questionId) => {
+    const response = await api.get(`/questions/signed-url/${questionId}`);
+    return response.data;
+  },
+  
   // Get all questions with optional filters
   getAll: async (filters = {}) => {
     const params = new URLSearchParams();

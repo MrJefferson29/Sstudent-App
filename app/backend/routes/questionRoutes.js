@@ -7,12 +7,14 @@ const {
   deleteQuestion,
   getSubjects,
   fixAllQuestionPDFs,
+  getSignedPdfUrl,
 } = require('../controllers/questionController');
 const { protect } = require('../middleware/authMiddleware');
 const upload = require('../middleware/upload');
 
 // Public routes
 router.get('/subjects', getSubjects); // Get unique subjects - must be before /:id route
+router.get('/signed-url/:id', getSignedPdfUrl); // Get signed URL for a question PDF - must be before /:id route
 router.get('/', getAllQuestions);
 router.get('/:id', getQuestionById);
 

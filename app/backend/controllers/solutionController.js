@@ -35,6 +35,7 @@ exports.uploadSolution = async (req, res) => {
         resource_type: 'raw',
         format: 'pdf',
         access_mode: 'public', // Explicitly set for PDFs
+        type: 'upload', // Ensure type is 'upload' (not 'authenticated' or 'private')
       });
       
       // Double-check and fix access mode if needed

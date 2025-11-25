@@ -85,9 +85,9 @@ export default function PastQuestions() {
   };
 
   // Open PDF in the app's PDF viewer
-  const openPDF = (url) => {
+  const openPDF = (questionObj) => {
     try {
-      const fullUrl = resolveAssetUrl(url) || url;
+      const fullUrl = resolveAssetUrl(questionObj.pdfUrl) || questionObj.pdfUrl;
 
       console.log('Opening PDF URL:', fullUrl);
 
@@ -102,6 +102,7 @@ export default function PastQuestions() {
         params: {
           pdfUrl: fullUrl,
           title: `${subject} - Past Question`,
+          questionId: questionObj._id, // Pass question ID for signed URL fallback
         },
       });
     } catch (error) {
@@ -184,6 +185,7 @@ export default function PastQuestions() {
           params: {
             pdfUrl: pdfUrl,
             title: `${subject} ${question.year} Solution`,
+            questionId: question._id, // Pass question ID for signed URL fallback
           },
         });
       } catch (error) {
@@ -293,7 +295,7 @@ export default function PastQuestions() {
                   {/* View PDF */}
                   <TouchableOpacity
                     style={[styles.button, { backgroundColor: "#16A34A" }]}
-                    onPress={() => openPDF(question.pdfUrl)}
+                    onPress={() => openPDF(question)}
                   >
                     <Ionicons name="document-text" size={16} color="#fff" />
                     <Text style={styles.buttonText}>View PDF</Text>

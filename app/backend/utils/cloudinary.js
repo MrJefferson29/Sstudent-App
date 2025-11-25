@@ -21,16 +21,17 @@ cloudinary.config({
 
 const uploadBuffer = (buffer, options = {}) =>
   new Promise((resolve, reject) => {
-    // Build upload options - ensure access_mode is always public
+    // Build upload options - ensure access_mode is always public and type is upload
     const uploadOptions = {
       resource_type: 'auto',
       overwrite: false,
       unique_filename: true,
       access_mode: 'public', // Ensure files are publicly accessible
-      type: 'upload', // Explicitly set type
+      type: 'upload', // Explicitly set type to 'upload' (not 'authenticated' or 'private')
       ...options,
-      // Force access_mode to public after merging options (in case it was overridden)
+      // Force access_mode and type after merging options (in case they were overridden)
       access_mode: 'public',
+      type: 'upload',
     };
 
     console.log('Uploading with options:', {
@@ -101,10 +102,64 @@ const updateAccessMode = async (publicId, resourceType = 'image') => {
   }
 };
 
+// Generate a signed URL for a resource (useful for private/authenticated resources)
+const getSignedUrl = (publicId, options = {}) => {
+  const {
+    resource_type = 'raw',
+    expires_in = 3600, // 1 hour default
+    transformation = null,
+  } = options;
+
+  try {
+    const signedUrl = cloudinary.url(publicId, {
+      resource_type,
+      type: 'authenticated', // Use authenticated type for signed URLs
+      sign_url: true,
+      expires_at: Math.floor(Date.now() / 1000) + expires_in,
+      secure: true,
+      ...(transformation && { transformation }),
+    });
+
+    return signedUrl;
+  } catch (error) {
+    console.error(`Error generating signed URL for ${publicId}:`, error);
+    return null;
+  }
+};
+
+// Get a public URL (preferred) or signed URL (fallback) for a resource
+const getAccessibleUrl = async (publicId, resourceType = 'raw') => {
+  if (!publicId) return null;
+
+  try {
+    // First, try to get the resource info to check its access mode
+    const resource = await cloudinary.api.resource(publicId, {
+      resource_type: resourceType,
+    });
+
+    // If it's public, return the direct URL
+    if (resource.access_mode === 'public' && resource.type === 'upload') {
+      return cloudinary.url(publicId, {
+        resource_type: resourceType,
+        secure: true,
+      });
+    }
+
+    // Otherwise, generate a signed URL
+    return getSignedUrl(publicId, { resource_type: resourceType });
+  } catch (error) {
+    console.error(`Error getting accessible URL for ${publicId}:`, error);
+    // Fallback: try to generate signed URL anyway
+    return getSignedUrl(publicId, { resource_type: resourceType });
+  }
+};
+
 module.exports = {
   cloudinary,
   uploadBuffer,
   deleteResource,
   updateAccessMode,
+  getSignedUrl,
+  getAccessibleUrl,
 };
 
