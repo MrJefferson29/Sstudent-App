@@ -14,11 +14,26 @@ export default function TabLayout() {
     if (!isLoading) {
       if (!userToken) {
         router.replace('/login' as any);
-      } else if (user && !user.profileCompleted) {
-        router.replace('/profile-completion' as any);
+      } else if (user && user.profileCompleted === false) {
+        // Only redirect if profileCompleted is explicitly false (not undefined/null)
+        // Add a longer delay to prevent race conditions when navigating from profile-completion
+        // This gives time for the user state to update after profile completion
+        const timer = setTimeout(() => {
+          // Double-check the user state before redirecting
+          // Also check if we're coming from profile-completion by checking the route
+          if (user && user.profileCompleted === false) {
+            console.log('Tabs layout: User profile not completed, redirecting to profile-completion');
+            router.replace('/profile-completion' as any);
+          } else {
+            console.log('Tabs layout: User profile is completed or state updated');
+          }
+        }, 500);
+        return () => clearTimeout(timer);
+      } else if (user && user.profileCompleted === true) {
+        console.log('Tabs layout: User profile is completed, allowing access');
       }
     }
-  }, [userToken, user, isLoading]);
+  }, [userToken, user?.profileCompleted, isLoading]);
 
   // Show loading indicator while checking authentication
   if (isLoading || !userToken) {

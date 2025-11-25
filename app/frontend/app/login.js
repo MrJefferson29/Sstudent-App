@@ -39,11 +39,26 @@ export default function Login() {
             await setUserToken(response.data.token, response.data.user);
             
             // Redirect to profile completion if profile is not completed
-            if (!response.data.user.profileCompleted) {
-              router.replace('/profile-completion');
-            } else {
-              router.replace('/( tabs )/index');
-            }
+            // Use a small delay to ensure state is fully updated before navigation
+            const needsProfileCompletion = !response.data.user.profileCompleted;
+            const targetRoute = needsProfileCompletion 
+              ? '/profile-completion' 
+              : '/( tabs )/index';
+            
+            // Navigate after state update
+            setTimeout(() => {
+              try {
+                router.replace(targetRoute);
+              } catch (error) {
+                console.error('Navigation error:', error);
+                // Fallback: try the full path
+                try {
+                  router.replace(needsProfileCompletion ? '/profile-completion' : '/( tabs )/index');
+                } catch (e) {
+                  router.push(targetRoute);
+                }
+              }
+            }, 200);
         } catch (error) {
             console.log('Login error:', error);
             let errorMessage = 'Something went wrong. Please try again.';

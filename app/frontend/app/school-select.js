@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { schoolsAPI, concoursAPI, departmentsAPI } from "./utils/api";
+import { schoolsAPI, concoursAPI } from "./utils/api";
 
 export default function SchoolSelect() {
   const router = useRouter();
@@ -21,17 +21,14 @@ export default function SchoolSelect() {
   const [schools, setSchools] = useState([]);
   const [concours, setConcours] = useState([]);
   const [error, setError] = useState(null);
+  const [selectedSchoolFilter, setSelectedSchoolFilter] = useState("all");
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = async (tab = activeTab) => {
     try {
       setIsLoading(true);
       setError(null);
 
-      if (activeTab === "school") {
+      if (tab === "school") {
         const response = await schoolsAPI.getAll();
         if (response.success) {
           setSchools(response.data || []);
@@ -39,22 +36,19 @@ export default function SchoolSelect() {
           setError("Failed to load schools");
         }
       } else {
-        // Fetch concours - get all departments first, then fetch concours
-        const deptResponse = await departmentsAPI.getAll();
-        if (deptResponse.success && deptResponse.data.length > 0) {
-          // Get unique concours from all departments
-          const allConcours = [];
-          for (const dept of deptResponse.data) {
-            const concoursRes = await concoursAPI.getAll(dept._id);
-            if (concoursRes.success && concoursRes.data) {
-              allConcours.push(...concoursRes.data);
-            }
-          }
-          // Group by title and year to avoid duplicates
-          const uniqueConcours = Array.from(
-            new Map(allConcours.map(c => [`${c.title}-${c.year}`, c])).values()
-          );
-          setConcours(uniqueConcours);
+        const [concoursRes, schoolsRes] = await Promise.all([
+          concoursAPI.getAll(),
+          schools.length ? Promise.resolve({ success: true, data: schools }) : schoolsAPI.getAll(),
+        ]);
+
+        if (concoursRes.success) {
+          setConcours(concoursRes.data || []);
+        } else {
+          setError("Failed to load concours");
+        }
+
+        if (schoolsRes.success) {
+          setSchools(schoolsRes.data || []);
         }
       }
     } catch (err) {
@@ -66,7 +60,10 @@ export default function SchoolSelect() {
   };
 
   useEffect(() => {
-    fetchData();
+    if (activeTab === "concour") {
+      setSelectedSchoolFilter("all");
+    }
+    fetchData(activeTab);
   }, [activeTab]);
 
   const handleSelection = (item) => {
@@ -84,6 +81,29 @@ export default function SchoolSelect() {
       });
     }
   };
+
+  const schoolFilterOptions = useMemo(() => {
+    const map = new Map();
+    concours.forEach((item) => {
+      const schoolId = item?.department?.school?._id || item?.department?.school;
+      const schoolName =
+        item?.department?.school?.name ||
+        schools.find((s) => s._id === schoolId)?.name ||
+        "Unknown School";
+      if (schoolId && !map.has(String(schoolId))) {
+        map.set(String(schoolId), schoolName);
+      }
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [concours, schools]);
+
+  const filteredConcours = useMemo(() => {
+    if (selectedSchoolFilter === "all") return concours;
+    return concours.filter((item) => {
+      const schoolId = item?.department?.school?._id || item?.department?.school;
+      return String(schoolId) === String(selectedSchoolFilter);
+    });
+  }, [concours, selectedSchoolFilter]);
 
   const renderItemsList = (items) => {
     if (isLoading) {
@@ -155,6 +175,118 @@ export default function SchoolSelect() {
     );
   };
 
+  const renderConcoursSection = () => {
+    if (isLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#1e67cd" />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      );
+    }
+
+    if (error) {
+      return (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => {
+              setError(null);
+              setIsLoading(true);
+              fetchData("concour");
+            }}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (!concours || concours.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No concours available.</Text>
+          <Text style={styles.emptySubtext}>
+            Administrators can upload concours from the dashboard.
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.concoursSection}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 10 }}
+        >
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              selectedSchoolFilter === "all" && styles.filterChipActive,
+            ]}
+            onPress={() => setSelectedSchoolFilter("all")}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                selectedSchoolFilter === "all" && styles.filterChipTextActive,
+              ]}
+            >
+              All Schools
+            </Text>
+          </TouchableOpacity>
+          {schoolFilterOptions.map((option) => (
+            <TouchableOpacity
+              key={option.id}
+              style={[
+                styles.filterChip,
+                selectedSchoolFilter === option.id && styles.filterChipActive,
+              ]}
+              onPress={() => setSelectedSchoolFilter(option.id)}
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  selectedSchoolFilter === option.id && styles.filterChipTextActive,
+                ]}
+              >
+                {option.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <View style={styles.itemsSection}>
+          {filteredConcours.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No concours for this school yet.</Text>
+            </View>
+          ) : (
+            filteredConcours.map((item) => (
+              <TouchableOpacity
+                key={item._id}
+                style={[styles.card, styles.concourCard]}
+                onPress={() => handleSelection(item)}
+              >
+                <Ionicons name="document-text-outline" size={24} color="#C026D3" />
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.cardText}>{item.title}</Text>
+                  <Text style={styles.cardSubtext}>
+                    {item.department?.school?.name || "School"} · {item.department?.name || "Department"}
+                  </Text>
+                  <Text style={styles.concourYear}>Year: {item.year}</Text>
+                </View>
+                <Ionicons name="open-outline" size={20} color="#999" />
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       {/* Header with Gradient */}
@@ -198,7 +330,7 @@ export default function SchoolSelect() {
 
       {/* Content Based on Active Tab */}
       <ScrollView style={styles.scrollView}>
-        {activeTab === "school" ? renderItemsList(schools) : renderItemsList(concours)}
+        {activeTab === "school" ? renderItemsList(schools) : renderConcoursSection()}
       </ScrollView>
     </View>
   );
@@ -299,4 +431,42 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   emptyText: { fontSize: 16, color: "#666", textAlign: "center" },
+  emptySubtext: { fontSize: 14, color: "#939393", marginTop: 6, textAlign: "center" },
+  filterScroll: {
+    backgroundColor: "#FFF",
+    borderBottomWidth: 1,
+    borderColor: "#EEE",
+  },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    marginRight: 10,
+    backgroundColor: "#F7F7F7",
+  },
+  filterChipActive: {
+    backgroundColor: "#1e67cd",
+    borderColor: "#1e67cd",
+  },
+  filterChipText: {
+    color: "#555",
+    fontWeight: "600",
+  },
+  filterChipTextActive: {
+    color: "#FFF",
+  },
+  concourCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: "#C026D3",
+  },
+  concoursSection: {
+    paddingBottom: 30,
+  },
+  concourYear: {
+    marginTop: 6,
+    color: "#6366F1",
+    fontWeight: "600",
+  },
 });

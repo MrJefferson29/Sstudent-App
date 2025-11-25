@@ -16,7 +16,7 @@ import { AuthContext } from './Contexts/AuthContext';
 import { schoolsAPI, departmentsAPI, profileAPI } from './utils/api';
 
 export default function ProfileCompletion() {
-  const { user, updateUser } = useContext(AuthContext);
+  const { user, updateUser, userToken, setUserToken } = useContext(AuthContext);
   const [schools, setSchools] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [selectedSchool, setSelectedSchool] = useState(null);
@@ -91,11 +91,41 @@ export default function ProfileCompletion() {
         matricule.trim()
       );
 
-      if (response.success) {
-        // Update user in context
-        await updateUser(response.user);
-        // Redirect to home screen immediately
-        router.replace('/');
+      if (response.success && response.user) {
+        // Verify profile is completed before updating
+        if (!response.user.profileCompleted) {
+          Alert.alert('Error', 'Profile completion failed. Please try again.');
+          return;
+        }
+
+        // Use setUserToken instead of updateUser to ensure state is properly updated
+        // This will trigger a full context update, not just a user data update
+        // setUserToken saves to AsyncStorage and updates state atomically
+        await setUserToken(userToken, response.user);
+        
+        console.log('User state updated via setUserToken');
+        console.log('Response user profileCompleted:', response.user.profileCompleted);
+        console.log('User token exists:', !!userToken);
+        
+        // Wait for state to propagate, then navigate
+        // Use a longer delay to ensure the tabs layout sees the updated state
+        setTimeout(() => {
+          try {
+            console.log('Navigating to: /');
+            router.replace('/');
+          } catch (error) {
+            console.error('Navigation error:', error);
+            try {
+              console.log('Fallback: Navigating to: /');
+              router.replace('/');
+            } catch (e) {
+              console.error('Fallback navigation error:', e);
+              router.push('/');
+            }
+          }
+        }, 1000);
+      } else {
+        Alert.alert('Error', 'Failed to complete profile. Please try again.');
       }
     } catch (error) {
       console.error('Error completing profile:', error);

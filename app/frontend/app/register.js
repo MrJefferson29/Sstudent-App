@@ -18,9 +18,11 @@ export default function Register() {
     const [department, setDepartment] = useState('');
     const [level, setLevel] = useState('');
 
-    // Redirect if already authenticated
+    // Redirect if already authenticated (skip during active registration)
+    // This useEffect is mainly for when user returns to register screen while already logged in
     useEffect(() => {
-        if (!isLoading && userToken) {
+        if (!isLoading && userToken && name === '' && email === '') {
+            // Only auto-redirect if form is empty (user came here while already logged in)
             router.replace('/( tabs )/index');
         }
     }, [userToken, isLoading]);
@@ -60,11 +62,29 @@ export default function Register() {
             console.log('Token and user data saved to AsyncStorage');
 
             // Redirect to profile completion if profile is not completed
-            if (!response.data.user.profileCompleted) {
-              router.replace('/profile-completion');
-            } else {
-              router.replace('/( tabs )/index');
-            }
+            // Use a small delay to ensure state is fully updated before navigation
+            const needsProfileCompletion = !response.data.user.profileCompleted;
+            const targetRoute = needsProfileCompletion 
+              ? '/profile-completion' 
+              : '/( tabs )/index';
+            
+            console.log('Navigating to:', targetRoute, 'profileCompleted:', response.data.user.profileCompleted);
+            
+            // Navigate after state update
+            setTimeout(() => {
+              try {
+                console.log('Attempting navigation to:', targetRoute);
+                router.replace(targetRoute);
+              } catch (error) {
+                console.error('Navigation error:', error);
+                // Fallback: try the full path
+                try {
+                  router.replace(needsProfileCompletion ? '/profile-completion' : '/( tabs )/index');
+                } catch (e) {
+                  router.push(targetRoute);
+                }
+              }
+            }, 200);
         } catch (error) {
             console.log('Registration error:', error);
             let errorMessage = 'Something went wrong. Please try again.';
