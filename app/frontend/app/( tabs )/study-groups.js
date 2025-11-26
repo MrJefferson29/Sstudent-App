@@ -1,74 +1,161 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TextInput,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ActivityIndicator,
+  FlatList,
+  Dimensions,
+  Animated,
+  Easing,
+  Keyboard
+} from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import axios from 'axios';
 import { io } from 'socket.io-client';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// --- Message Bubble Component ---
-const MessageBubble = React.memo(({ msg, myUsername }) => {
-  // Use a fallback for user key consistency, although typically it's 'user' from the server
-  const senderName = msg.user || msg.username || 'System'; 
+const { width } = Dimensions.get('window');
+
+const darkColors = {
+  primary: '#00B894',
+  accent: '#74B9FF',
+  accentLight: '#A3D9FF',
+  error: '#FF6B6B',
+  border: '#3A4750',
+  background: '#1C2833',
+  backgroundOverlay: 'rgba(0,0,0,0.7)',
+  card: '#2E4053',
+  textPrimary: '#ECF0F1',
+  textSecondary: '#BDC3C7',
+  textTertiary: '#7F8C8D',
+  chatUser: '#00B894',
+  chatBot: '#2E4053',
+  chatSend: '#74B9FF',
+  chatInput: '#3A4750',
+  chatError: '#E74C3C',
+  gradientPrimary: ['#1C2833', '#2E4053'],
+};
+
+const TOPIC_FILTERS = ['All Chats', 'Assignments', 'Exams', 'Projects', 'Resources'];
+
+const MessageBubble = React.memo(({ msg, myUsername, colors }) => {
+  const senderName = msg.user || msg.username || 'System';
   const isMyMessage = senderName === myUsername;
-  
+
   return (
-    <View 
-      key={msg.id || msg._id || Math.random()} 
+    <View
       style={[
-        styles.message, 
-        isMyMessage ? styles.myMessage : styles.otherMessage
+        styles.bubble,
+        isMyMessage
+          ? {
+              backgroundColor: colors.chatUser,
+              alignSelf: 'flex-end',
+              borderTopLeftRadius: 10,
+              borderTopRightRadius: 10,
+              borderBottomLeftRadius: 10,
+              borderBottomRightRadius: 0,
+            }
+          : {
+              backgroundColor: colors.chatBot,
+              alignSelf: 'flex-start',
+              borderTopLeftRadius: 10,
+              borderTopRightRadius: 10,
+              borderBottomLeftRadius: 0,
+              borderBottomRightRadius: 10,
+            },
       ]}
     >
-      {/* Show username for other messages */}
-      {!isMyMessage && <Text style={styles.user}>{senderName}:</Text>}
-      
-      {/* Style text based on who sent it */}
-      <Text style={isMyMessage ? styles.myMessageText : styles.otherMessageText}>
+      {!isMyMessage && <Text style={[styles.user, { color: colors.primary }]}>{senderName}</Text>}
+
+      <Text style={[styles.bubbleText, { color: isMyMessage ? '#fff' : colors.textPrimary }]}>
         {msg.text}
       </Text>
+
+      <View style={styles.bubbleFooter}>
+        <Text
+          style={[
+            styles.bubbleTime,
+            {
+              color: isMyMessage ? 'rgba(255,255,255,0.6)' : colors.textSecondary,
+              textAlign: isMyMessage ? 'right' : 'left',
+            },
+          ]}
+        >
+          {msg.timestamp
+            ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </Text>
+      </View>
     </View>
   );
 });
 
-// --- Main Component ---
 export default function StudyGroupsScreen() {
+  const colors = darkColors;
+  const insets = useSafeAreaInsets();
+
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState([]);
   const [typingUser, setTypingUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const scrollRef = useRef(null);
+  const [selectedFilter, setSelectedFilter] = useState(TOPIC_FILTERS[0]);
+  const [activeMembers, setActiveMembers] = useState(0);
 
+  const flatListRef = useRef(null);
+  const usernameRef = useRef('Me');
+  const groupIdRef = useRef(null);
+  const socketRef = useRef(null);
+  const activeMembersRef = useRef(new Set());
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+
+  // API URL resolver
   const API_URL = useMemo(() => {
     const envUrl = Constants?.expoConfig?.extra?.apiUrl || process.env.EXPO_PUBLIC_API_URL;
     if (envUrl) return envUrl;
-    // Emulator-safe defaults
     if (Platform.OS === 'android') return 'https://uba-r875.onrender.com';
-    // iOS simulator/mac or web fallback
     return 'https://ficedu-payment.onrender.com';
   }, []);
 
-  const socketRef = useRef(null);
-  const groupIdRef = useRef(null);
-  const usernameRef = useRef('You');
-
+  // Setup socket + initial fetch
   useEffect(() => {
     let mounted = true;
     const setup = async () => {
       try {
-        // 1) Get default group id
+        // fetch default group id
         const groupRes = await axios.get(`${API_URL}/study-groups/default`);
         const groupId = groupRes.data.groupId;
         groupIdRef.current = groupId;
 
-        // 2) Fetch history
+        // fetch messages
         const msgsRes = await axios.get(`${API_URL}/study-groups/${groupId}/messages?limit=50`);
+        const fetchedMessages = msgsRes.data.messages || [];
         if (mounted) {
-          setMessages(msgsRes.data.messages || []);
+          activeMembersRef.current = new Set(
+            fetchedMessages.map((item) => (item.user || item.username)).filter(Boolean)
+          );
+          setActiveMembers(Math.max(1, activeMembersRef.current.size));
+          // ensure timestamps exist
+          setMessages(
+            fetchedMessages.map((m) => ({ ...m, timestamp: m.timestamp || new Date().toISOString() }))
+          );
           setLoading(false);
+
+          // Scroll to bottom after a small delay
+          setTimeout(() => {
+            tryScrollToEnd();
+          }, 250);
         }
 
-        // 3) Connect socket and join room
+        // connect socket
         const socket = io(API_URL, {
           autoConnect: true,
           transports: ['polling', 'websocket'],
@@ -83,209 +170,436 @@ export default function StudyGroupsScreen() {
           socket.emit('join', { groupId, username: usernameRef.current });
         });
 
-        socket.on('connect_error', (err) => {
-          console.warn('Socket connect_error:', err?.message);
-        });
-
         socket.on('message', (payload) => {
-          // Use 'user' for consistency with historical messages, though payload might use 'username'
-          const finalPayload = { ...payload, user: payload.user || payload.username }; 
+          const finalPayload = {
+            ...payload,
+            user: payload.user || payload.username,
+            timestamp: payload.timestamp || new Date().toISOString(),
+          };
+
+          if (finalPayload.user) {
+            const key = finalPayload.user.toString().toLowerCase();
+            if (!activeMembersRef.current.has(key)) {
+              activeMembersRef.current.add(key);
+              setActiveMembers(activeMembersRef.current.size);
+            }
+          }
+
+          // optimistic update from server
           setMessages((prev) => [...prev, finalPayload]);
-          // Auto-scroll to bottom
-          scrollRef.current?.scrollToEnd({ animated: true });
+          // quick fade (re-trigger)
+          fadeAnim.setValue(0);
+          Animated.timing(fadeAnim, { toValue: 1, duration: 280, useNativeDriver: true, easing: Easing.ease }).start();
+
+          // scroll to end
+          setTimeout(() => tryScrollToEnd(), 80);
         });
 
         socket.on('typing', ({ username }) => {
-          if (username !== usernameRef.current) { // Don't show typing for self
+          if (username !== usernameRef.current) {
             setTypingUser(username);
             setTimeout(() => setTypingUser(null), 1500);
           }
         });
       } catch (err) {
         console.error('Study group setup error:', err);
-        if(mounted) setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
 
     setup();
+
     return () => {
       mounted = false;
       socketRef.current?.disconnect();
     };
-  }, [API_URL]);
+  }, [API_URL, fadeAnim]);
+
+  // When messages change, ensure scroll to bottom
+  useEffect(() => {
+    if (messages.length > 0) {
+      // animate subtle appearance
+      fadeAnim.setValue(0);
+      Animated.timing(fadeAnim, { toValue: 1, duration: 220, useNativeDriver: true, easing: Easing.ease }).start();
+      tryScrollToEnd();
+    }
+  }, [messages, fadeAnim]);
+
+  // Attempt to scroll to end in a robust way
+  const tryScrollToEnd = () => {
+    // If FlatList exposes scrollToEnd (it should via ScrollView), call it. Otherwise use scrollToOffset.
+    const fl = flatListRef.current;
+    if (!fl) return;
+    // Try scrollToEnd first:
+    try {
+      fl.scrollToEnd?.({ animated: true });
+      // If scrollToEnd exists, done.
+      return;
+    } catch (e) {
+      // ignore
+    }
+    // Fallback: measure content size by using scrollResponder
+    try {
+      fl.scrollToOffset?.({ offset: 99999, animated: true });
+    } catch (e) {
+      // last resort: no-op
+    }
+  };
 
   const handleSend = () => {
     const text = inputText.trim();
     if (!text || !groupIdRef.current) return;
     const socket = socketRef.current;
-    
-    // Payload to send to both socket and REST fallback
+    const timestamp = new Date().toISOString();
+
     const messagePayload = {
       groupId: groupIdRef.current,
       text,
       username: usernameRef.current,
+      timestamp,
     };
+
+    // optimistic user message
+    const userMsg = {
+      id: Date.now(),
+      user: usernameRef.current,
+      text,
+      timestamp,
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
+    setInputText('');
+    tryScrollToEnd();
 
     if (socket && socket.connected) {
       socket.emit('message', messagePayload);
-      setInputText('');
     } else {
-      // Fallback: persist via REST and append locally
-      axios
-        .post(`${API_URL}/study-groups/${groupIdRef.current}/messages/public`, messagePayload)
-        .then((res) => {
-          const payload = res.data?.message || { 
-            id: Date.now(), 
-            user: usernameRef.current, // Use 'user' for local append to match structure
-            text, 
-            timestamp: new Date().toISOString() 
-          };
-          setMessages((prev) => [...prev, payload]);
-          setInputText('');
-          scrollRef.current?.scrollToEnd({ animated: true });
-        })
-        .catch((err) => {
-          console.warn('REST send error:', err?.message);
-        });
+      axios.post(`${API_URL}/study-groups/${groupIdRef.current}/messages/public`, messagePayload).catch((err) => {
+        console.warn('REST send error:', err?.message);
+      });
     }
   };
 
   const handleTyping = (value) => {
     setInputText(value);
-    // Emit typing event only if text is not empty
-    if (value.length > 0 && groupIdRef.current && socketRef.current && socketRef.current.connected) {
+    if (value.length > 0 && groupIdRef.current && socketRef.current?.connected) {
       socketRef.current.emit('typing', { groupId: groupIdRef.current, username: usernameRef.current });
     }
   };
 
+  // keep keyboard open behavior: when keyboard opens, scroll to end
+  useEffect(() => {
+    const onShow = () => tryScrollToEnd();
+    const showSub = Keyboard.addListener('keyboardDidShow', onShow);
+    return () => showSub.remove();
+  }, []);
+
   return (
-    <View style={styles.container}>
-      <LinearGradient colors={["#43cea2", "#3498DB"]} style={styles.headerGradient}>
-        <Text style={styles.headerTitle}>Study Group</Text>
-        <Text style={styles.headerSubtitle}>Ask questions and get answers from fellow students</Text>
-      </LinearGradient>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        // Increased offset to account for header height
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={insets.top + 10}
       >
-        <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {loading ? (
-            <Text style={{ color: '#636e72' }}>Loading messages...</Text>
-          ) : (
-            messages.map((msg) => (
-              <MessageBubble key={msg.id || msg._id || Math.random()} msg={msg} myUsername={usernameRef.current} />
-            ))
-          )}
-          {typingUser && (
-            <Text style={{ color: '#b2bec3', fontStyle: 'italic', marginTop: 6, marginBottom: 10 }}>{typingUser} is typing...</Text>
-          )}
-        </ScrollView>
-        <View style={styles.inputRow}>
-          <TextInput
-            style={styles.input}
-            placeholder="Type your message..."
-            value={inputText}
-            onChangeText={handleTyping}
-            placeholderTextColor="#b2bec3"
-            onSubmitEditing={handleSend}
-            returnKeyType="send"
-          />
-          <TouchableOpacity style={styles.sendButton} onPress={handleSend} disabled={inputText.trim().length === 0}>
-            <Ionicons name="send" size={22} color="#fff" />
+        {/* Header */}
+        <LinearGradient colors={colors.gradientPrimary} style={[styles.header, { paddingTop: insets.top + 12 }]}>
+          <TouchableOpacity style={[styles.backButton, { backgroundColor: 'rgba(255,255,255,0.12)' }]} onPress={() => { /* navigate to group settings */ }}>
+            <Ionicons name="settings-outline" size={22} color="#fff" />
           </TouchableOpacity>
+
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Study Group 📚</Text>
+            <Text style={styles.headerSubtitle}>
+              Topic: {selectedFilter}  |  {activeMembers} Active
+            </Text>
+          </View>
+
+          <TouchableOpacity style={[styles.fab, { backgroundColor: colors.accent }]} onPress={() => { /* show members */ }}>
+            <MaterialCommunityIcons name="account-group" size={20} color="#fff" />
+          </TouchableOpacity>
+        </LinearGradient>
+
+        {/* Filters row */}
+        <View style={[styles.filtersRow, { backgroundColor: colors.background }]}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersScrollContent}>
+            {TOPIC_FILTERS.map((filter) => {
+              const active = selectedFilter === filter;
+              return (
+                <TouchableOpacity
+                  key={filter}
+                  style={[
+                    styles.filterChip,
+                    active
+                      ? { backgroundColor: colors.primary, borderColor: 'transparent' }
+                      : { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 },
+                  ]}
+                  onPress={() => setSelectedFilter(filter)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={active ? { color: colors.background, fontWeight: '700' } : { color: colors.textSecondary, fontWeight: '600' }}>
+                    {filter}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        {/* Chat messages */}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyboardShouldPersistTaps="handled"
+          keyExtractor={(item, idx) => (item?.id?.toString ? item.id.toString() : String(idx))}
+          renderItem={({ item }) => (
+            <Animated.View style={{ opacity: fadeAnim }}>
+              <MessageBubble msg={item} myUsername={usernameRef.current} colors={colors} />
+            </Animated.View>
+          )}
+          contentContainerStyle={styles.flatListContentAdjusted}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={() =>
+            loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading chat history...</Text>
+              </View>
+            ) : (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="chatbubbles-outline" size={50} color={colors.textTertiary} />
+                <Text style={[styles.emptyText, { color: colors.textTertiary }]}>Start a conversation!</Text>
+              </View>
+            )
+          }
+          ListFooterComponent={() =>
+            typingUser ? (
+              <View style={[styles.typingIndicator, { backgroundColor: colors.card }]}>
+                <Text style={[styles.typingText, { color: colors.textSecondary }]}>{typingUser} is typing...</Text>
+              </View>
+            ) : null
+          }
+        />
+
+        {/* Input bar */}
+        <View
+          style={[
+            styles.inputWrapperFixed,
+            {
+              borderTopColor: colors.border,
+              backgroundColor: colors.background,
+              paddingBottom: insets.bottom || 12,
+            },
+          ]}
+        >
+          <View style={[styles.inputContainer, { backgroundColor: colors.background }]}>
+            <TextInput
+              style={[
+                styles.textInput,
+                {
+                  color: colors.textPrimary,
+                  backgroundColor: colors.chatInput,
+                  borderColor: colors.border,
+                },
+              ]}
+              value={inputText}
+              onChangeText={handleTyping}
+              placeholder="Type a message..."
+              placeholderTextColor={colors.textTertiary}
+              multiline
+              textAlignVertical="center"
+              autoCorrect
+              blurOnSubmit={false}
+              returnKeyType="default"
+              numberOfLines={4}
+              onFocus={() => tryScrollToEnd()}
+            />
+            <TouchableOpacity
+              onPress={handleSend}
+              style={[
+                styles.sendButton,
+                { backgroundColor: colors.chatSend },
+                !inputText.trim() && { opacity: 0.55 },
+              ]}
+              disabled={!inputText.trim()}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="send" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
         </View>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 
+// --- Styles ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
   },
-  headerGradient: {
-    // Increased paddingTop to accommodate status bar area
-    paddingTop: Constants.statusBarHeight + 10, 
-    paddingBottom: 30,
-    paddingHorizontal: 24,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-    marginBottom: 10,
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingBottom: 12,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+  },
+  backButton: {
+    borderRadius: 20,
+    padding: 8,
+    marginRight: 8,
+  },
+  headerCenter: {
+    flex: 1,
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 26,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '700',
     color: '#fff',
-    marginBottom: 6,
-    letterSpacing: 1,
+    letterSpacing: 0.3,
   },
   headerSubtitle: {
-    fontSize: 15,
-    color: '#e0f7fa',
+    fontSize: 12,
+    color: darkColors.textSecondary,
+    marginTop: 2,
     fontWeight: '500',
-    letterSpacing: 0.5,
-    textAlign: 'center',
   },
-  scrollContent: {
-    padding: 18,
-    paddingBottom: 80,
-  },
-  message: {
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-    maxWidth: '85%',
-  },
-  myMessage: {
-    backgroundColor: '#3498DB',
-    alignSelf: 'flex-end',
-  },
-  otherMessage: {
-    backgroundColor: '#dff9fb',
-    alignSelf: 'flex-start',
-  },
-  user: {
-    fontWeight: 'bold',
-    color: '#636e72',
-    marginBottom: 2,
-  },
-  myMessageText: { // Added specific text style for my messages
-    color: '#fff', 
-    fontSize: 15,
-  },
-  otherMessageText: { // Added specific text style for other messages
-    color: '#2d3436', 
-    fontSize: 15,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingBottom: 18,
-    backgroundColor: '#F8F9FA',
-    borderTopWidth: 1, // Added subtle separator
-    borderColor: '#dfe6e9',
-  },
-  input: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    fontSize: 15,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: '#dfe6e9',
-    color: '#222f3e',
-  },
-  sendButton: {
-    backgroundColor: '#43cea2',
+  fab: {
     borderRadius: 24,
     padding: 10,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+  },
+
+  // Filters
+  filtersRow: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: darkColors.border,
+    zIndex: 1,
+  },
+  filtersScrollContent: {
+    paddingHorizontal: 15,
+  },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+  },
+
+  // Chat list
+  flatListContentAdjusted: {
+    padding: 10,
+    flexGrow: 1,
+    justifyContent: 'flex-end',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 50,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 50,
+  },
+  emptyText: {
+    marginTop: 10,
+    fontSize: 16,
+  },
+
+  // Bubble
+  bubble: {
+    maxWidth: '78%',
+    marginVertical: 6,
+    padding: 12,
+    marginHorizontal: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  user: {
+    fontWeight: '700',
+    marginBottom: 6,
+    fontSize: 13,
+  },
+  bubbleText: {
+    fontSize: 16,
+  },
+  bubbleFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  bubbleTime: {
+    fontSize: 10,
+    marginTop: 4,
+  },
+
+  typingIndicator: {
+    alignSelf: 'flex-start',
+    padding: 10,
+    marginHorizontal: 10,
+    borderRadius: 15,
+    borderTopLeftRadius: 5,
+    marginBottom: 10,
+    maxWidth: '75%',
+  },
+  typingText: {
+    fontStyle: 'italic',
+    fontSize: 13,
+  },
+
+  // Input wrapper
+  inputWrapperFixed: {
+    borderTopWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 16,
+    paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+    borderRadius: 25,
+    borderWidth: 1,
+    maxHeight: 120,
+    minHeight: 46,
+  },
+  sendButton: {
+    marginLeft: 10,
+    padding: 10,
+    borderRadius: 25,
+    height: 45,
+    width: 45,
     justifyContent: 'center',
     alignItems: 'center',
   },

@@ -369,5 +369,24 @@ export const liveSessionsAPI = {
   },
 };
 
+// Library API
+export const libraryAPI = {
+  getAll: async (filters = {}) => {
+    const params = new URLSearchParams();
+
+    if (filters.category) params.append('category', filters.category);
+    if (filters.author) params.append('author', filters.author);
+    if (filters.query) params.append('query', filters.query);
+
+    const response = await api.get(`/library?${params.toString()}`);
+    return response.data;
+  },
+
+  getById: async (bookId) => {
+    const response = await api.get(`/library/${bookId}`);
+    return response.data;
+  },
+};
+
 export default api;
 

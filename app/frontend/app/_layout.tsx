@@ -24,6 +24,7 @@ export default function RootLayout() {
           <Stack.Screen name="level-select" options={{ headerTitle: "Level Select" }} />
           <Stack.Screen name="skill-courses" options={{ headerTitle: "Skill Courses" }} />
           <Stack.Screen name="itemDetail/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="library/[id]" options={{ headerShown: false }} />
         </Stack>
       </GestureHandlerRootView>
     </AuthProvider>
