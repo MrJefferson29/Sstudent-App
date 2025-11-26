@@ -1,212 +1,240 @@
 import React, { useContext, useState, useEffect } from 'react';
-import { Alert, TextInput, TouchableOpacity, View, Text, StyleSheet, Image, ScrollView } from 'react-native';
+import { Alert, TextInput, TouchableOpacity, View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient'; // Added LinearGradient import
 import axios from 'axios';
 import { AuthContext } from './Contexts/AuthContext';
 import { router } from 'expo-router';
+
 // API Configuration - Update this URL to match your backend
 const API_URL = __DEV__ 
-    ? 'https://uba-r875.onrender.com'  // Development - Change to your IP for physical device
-  : 'https://uba-r875.onrender.com';  // Production
+    ? 'https://uba-r875.onrender.com'  // Development - Change to your IP for physical device
+  : 'https://uba-r875.onrender.com';  // Production
 
 export default function Register() {
-    const { setUserToken, userToken, isLoading } = useContext(AuthContext);
-    const [name, setName] = useState('');
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
-    const [school, setSchool] = useState('');
-    const [department, setDepartment] = useState('');
-    const [level, setLevel] = useState('');
+    const { setUserToken, userToken, isLoading } = useContext(AuthContext);
+    const [name, setName] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    // Optional fields kept for API call, even if not displayed initially
+    const [school, setSchool] = useState(''); 
+    const [department, setDepartment] = useState('');
+    const [level, setLevel] = useState('');
 
-    // Redirect if already authenticated (skip during active registration)
-    // This useEffect is mainly for when user returns to register screen while already logged in
-    useEffect(() => {
-        if (!isLoading && userToken && name === '' && email === '') {
-            // Only auto-redirect if form is empty (user came here while already logged in)
-            router.replace('/( tabs )/index');
-        }
-    }, [userToken, isLoading]);
+    // Redirect if already authenticated
+    useEffect(() => {
+        if (!isLoading && userToken && name === '' && email === '') {
+            router.replace('/( tabs )/index');
+        }
+    }, [userToken, isLoading]);
 
-    const handleRegister = async () => {
-        try {
-            // Validation
-            if (!name || !email || !password) {
-                Alert.alert('Error', 'Please fill in all required fields');
-                return;
-            }
+    const handleRegister = async () => {
+        try {
+            // Validation
+            if (!name || !email || !password) {
+                Alert.alert('Error', 'Please fill in all required fields');
+                return;
+            }
 
-            if (password.length < 6) {
-                Alert.alert('Error', 'Password must be at least 6 characters');
-                return;
-            }
+            if (password.length < 6) {
+                Alert.alert('Error', 'Password must be at least 6 characters');
+                return;
+            }
 
-            if (password !== confirmPassword) {
-                Alert.alert('Error', 'Passwords do not match');
-                return;
-            }
+            if (password !== confirmPassword) {
+                Alert.alert('Error', 'Passwords do not match');
+                return;
+            }
 
-            console.log('Attempting registration with:', { name, email });
-            const response = await axios.post(`${API_URL}/auth/register`, {
-                name,
-                email,
-                password,
-                school: school || undefined,
-                department: department || undefined,
-                level: level || undefined,
-            });
+            console.log('Attempting registration with:', { name, email });
+            const response = await axios.post(`${API_URL}/auth/register`, {
+                name,
+                email,
+                password,
+                school: school || undefined,
+                department: department || undefined,
+                level: level || undefined,
+            });
 
-            console.log('Registration response:', response.data);
+            console.log('Registration response:', response.data);
 
-            // Update the AuthContext (which saves to AsyncStorage automatically)
-            await setUserToken(response.data.token, response.data.user);
-            console.log('Token and user data saved to AsyncStorage');
+            // Update the AuthContext (which saves to AsyncStorage automatically)
+            await setUserToken(response.data.token, response.data.user);
+            console.log('Token and user data saved to AsyncStorage');
 
-            // Redirect to profile completion if profile is not completed
-            // Use a small delay to ensure state is fully updated before navigation
-            const needsProfileCompletion = !response.data.user.profileCompleted;
-            const targetRoute = needsProfileCompletion 
-              ? '/profile-completion' 
-              : '/( tabs )/index';
-            
-            console.log('Navigating to:', targetRoute, 'profileCompleted:', response.data.user.profileCompleted);
-            
-            // Navigate after state update
-            setTimeout(() => {
-              try {
-                console.log('Attempting navigation to:', targetRoute);
-                router.replace(targetRoute);
-              } catch (error) {
-                console.error('Navigation error:', error);
-                // Fallback: try the full path
-                try {
-                  router.replace(needsProfileCompletion ? '/profile-completion' : '/( tabs )/index');
-                } catch (e) {
-                  router.push(targetRoute);
-                }
-              }
-            }, 200);
-        } catch (error) {
-            console.log('Registration error:', error);
-            let errorMessage = 'Something went wrong. Please try again.';
-            
-            if (error.code === 'ECONNREFUSED' || error.message === 'Network Error') {
-                errorMessage = 'Cannot connect to server. Please check:\n1. Backend server is running\n2. Correct IP address and port\n3. Both devices are on the same network';
-            } else if (error.response?.data?.message) {
-                errorMessage = error.response.data.message;
-            } else if (error.message) {
-                errorMessage = error.message;
-            }
-            
-            Alert.alert('Error', errorMessage);
-        }
-    };
+            // Redirect to profile completion if profile is not completed
+            const needsProfileCompletion = !response.data.user.profileCompleted;
+            const targetRoute = needsProfileCompletion 
+              ? '/profile-completion' 
+              : '/( tabs )/index';
+            
+            console.log('Navigating to:', targetRoute, 'profileCompleted:', response.data.user.profileCompleted);
+            
+            // Navigate after state update
+            setTimeout(() => {
+              try {
+                router.replace(targetRoute);
+              } catch (error) {
+                console.error('Navigation fallback error:', error);
+                router.push(targetRoute);
+              }
+            }, 200);
+        } catch (error) {
+            console.log('Registration error:', error);
+            let errorMessage = 'Something went wrong. Please try again.';
+            
+            if (error.code === 'ECONNREFUSED' || error.message === 'Network Error') {
+                errorMessage = 'Cannot connect to server. Please check:\n1. Backend server is running\n2. Correct IP address and port\n3. Both devices are on the same network';
+            } else if (error.response?.data?.message) {
+                errorMessage = error.response.data.message;
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+            
+            Alert.alert('Error', errorMessage);
+        }
+    };
 
-    return (
-        <ScrollView style={styles.wrapper} contentContainerStyle={styles.contentContainer}>
-            <Text style={styles.title}>University of Bamenda Student App</Text>
-            <Text style={styles.subtitle}>Create your Account!</Text>
-            <View>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Full Name *"
-                    value={name}
-                    onChangeText={setName}
-                />
-                <TextInput
-                    style={styles.input}
-                    placeholder="Email *"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    value={email}
-                    onChangeText={setEmail}
-                />
-                <TextInput
-                    style={styles.input}
-                    placeholder="Password *"
-                    secureTextEntry
-                    value={password}
-                    onChangeText={setPassword}
-                />
-                <TextInput
-                    style={styles.input}
-                    placeholder="Confirm Password *"
-                    secureTextEntry
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                />
-            </View>
-            <TouchableOpacity style={styles.button} onPress={handleRegister}>
-                <Text style={styles.buttonText}>Sign up</Text>
-            </TouchableOpacity>
-            <View style={styles.footer}>
-                <Text style={styles.footerText}>
-                    Already have an account?{' '}
-                    <Text style={styles.signIn} onPress={() => router.push('/login')}>
-                        Sign in!
-                    </Text>
-                </Text>
-            </View>
-        </ScrollView>
-    );
+    return (
+        <LinearGradient colors={['#f5f7fa', '#e4e8f0']} style={styles.gradient}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.flex}
+          >
+            <ScrollView contentContainerStyle={styles.scrollContainer}>
+              <View style={styles.card}>
+                <Text style={styles.title}>Create Student Account</Text>
+                <Text style={styles.subtitle}>Sign up to access the UBA portal</Text>
+
+                <View style={styles.form}>
+                  <TextInput
+                      style={styles.input}
+                      placeholder="Full Name"
+                      value={name}
+                      onChangeText={setName}
+                      placeholderTextColor="#94a3b8"
+                  />
+                  <TextInput
+                      style={styles.input}
+                      placeholder="Email"
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      value={email}
+                      onChangeText={setEmail}
+                      placeholderTextColor="#94a3b8"
+                  />
+                  <TextInput
+                      style={styles.input}
+                      placeholder="Password"
+                      secureTextEntry
+                      value={password}
+                      onChangeText={setPassword}
+                      placeholderTextColor="#94a3b8"
+                  />
+                  <TextInput
+                      style={styles.input}
+                      placeholder="Confirm Password"
+                      secureTextEntry
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      placeholderTextColor="#94a3b8"
+                  />
+                </View>
+
+                <TouchableOpacity style={styles.button} onPress={handleRegister}>
+                    <Text style={styles.buttonText}>Sign up</Text>
+                </TouchableOpacity>
+
+                <View style={styles.footer}>
+                    <Text style={styles.footerText}>
+                        Already have an account?{' '}
+                        <Text style={styles.signIn} onPress={() => router.push('/login')}>
+                            Sign in!
+                        </Text>
+                    </Text>
+                </View>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </LinearGradient>
+    );
 }
 
 const styles = StyleSheet.create({
-    wrapper: {
-        flex: 1,
-        backgroundColor: '#ffffff',
-    },
-    contentContainer: {
-        padding: 20,
-    },
-    title: {
-        fontSize: 24,
-        fontWeight: '900',
-        textAlign: 'center',
-        marginBottom: 20,
-        color: 'blue',
-        padding: 50,
-    },
-    subtitle: {
-        fontSize: 16,
-        marginBottom: 20,
-        color: '#666',
-        fontWeight: 'bold',
-    },
-    input: {
-        backgroundColor: '#f0f0f0',
-        marginBottom: 15,
-        padding: 10,
-        borderRadius: 4,
-        height: 50,
-        borderWidth: 1,
-        borderColor: '#ccc',
-    },
-    button: {
-        backgroundColor: '#575757',
-        paddingVertical: 15,
-        borderRadius: 8,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginTop: 10,
-    },
-    buttonText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    footer: {
-        marginTop: 30,
-        alignItems: 'center',
-    },
-    footerText: {
-        fontSize: 14,
-        color: '#666',
-        marginTop: 30,
-    },
-    signIn: {
-        fontSize: 14,
-        color: '#007BFF',
-        fontWeight: 'bold',
-    },
+    flex: {
+      flex: 1,
+    },
+    gradient: {
+        flex: 1,
+        justifyContent: 'center',
+    },
+    scrollContainer: {
+      flexGrow: 1,
+      padding: 24,
+      justifyContent: 'center',
+    },
+    card: {
+      backgroundColor: '#ffffff',
+      borderRadius: 24,
+      padding: 24,
+      shadowColor: '#000',
+      shadowOpacity: 0.08,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 6,
+    },
+    title: {
+        fontSize: 26,
+        fontWeight: '800',
+        textAlign: 'center',
+        marginBottom: 8,
+        color: '#1a237e',
+    },
+    subtitle: {
+        fontSize: 15,
+        marginBottom: 24,
+        color: '#64748B',
+        textAlign: 'center',
+    },
+    form: {
+      marginBottom: 16,
+    },
+    input: {
+        backgroundColor: '#f8fafc',
+        marginBottom: 20,
+        padding: 10,
+        borderRadius: 12,
+        height: 52,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        fontSize: 15,
+        color: '#0f172a',
+    },
+    button: {
+        backgroundColor: '#1a237e',
+        paddingVertical: 16,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 8,
+    },
+    buttonText: {
+        color: 'white',
+        fontSize: 17,
+        fontWeight: '600',
+    },
+    footer: {
+        marginTop: 30,
+        alignItems: 'center',
+    },
+    footerText: {
+        fontSize: 15,
+        color: '#94a3b8',
+        marginTop: 30,
+    },
+    signIn: { // Renamed from signUp for semantic accuracy in Register.js
+        fontSize: 15,
+        color: '#1a237e',
+        fontWeight: '700',
+    },
 });
-

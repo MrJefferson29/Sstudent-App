@@ -1,5 +1,6 @@
 import React, { useContext, useState, useEffect } from 'react';
-import { Alert, TextInput, TouchableOpacity, View, Text, StyleSheet, Image } from 'react-native';
+import { Alert, TextInput, TouchableOpacity, View, Text, StyleSheet, Image, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import axios from 'axios';
 import { AuthContext } from './Contexts/AuthContext';
 import { router } from 'expo-router';
@@ -76,106 +77,143 @@ export default function Login() {
     };
     
     return (
-        <View style={styles.wrapper}>
-            <Text style={styles.title}>University of Bamenda Student App</Text>
-            <Text style={styles.subtitle}>Login to your Account!</Text>
-            <View>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Email"
-                    keyboardType="email-address"
-                    value={email}
-                    onChangeText={setEmail}
-                />
-                <TextInput
-                    style={styles.input}
-                    placeholder="Password"
-                    secureTextEntry
-                    value={password}
-                    onChangeText={setPassword}
-                />
-            </View>
-            <TouchableOpacity style={styles.button} onPress={handleLogin}>
-                <Text style={styles.buttonText}>Sign in</Text>
-            </TouchableOpacity>
-            <Text style={styles.orText}>- Or sign up with -</Text>
-            <View style={styles.iconContainer}>
-                <TouchableOpacity style={styles.iconWrapper}>
-                    <Image
-                        source={require('../assets/images/google.png')} // Replace with your image path
-                        style={styles.image}
-                    />
+        <LinearGradient colors={['#f5f7fa', '#e4e8f0']} style={styles.gradient}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.flex}
+          >
+            <ScrollView contentContainerStyle={styles.scrollContainer}>
+              <View style={styles.card}>
+                <Text style={styles.title}>User Login</Text>
+                <Text style={styles.subtitle}>Sign in to access the portal</Text>
+
+                <View style={styles.form}>
+                  <TextInput
+                      style={styles.input}
+                      placeholder="Email"
+                      keyboardType="email-address"
+                      value={email}
+                      onChangeText={setEmail}
+                      placeholderTextColor="#94a3b8"
+                  />
+                  <TextInput
+                      style={styles.input}
+                      placeholder="Password"
+                      secureTextEntry
+                      value={password}
+                      onChangeText={setPassword}
+                      placeholderTextColor="#94a3b8"
+                  />
+                </View>
+
+                <TouchableOpacity style={styles.button} onPress={handleLogin}>
+                    <Text style={styles.buttonText}>Login</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.iconWrapper}>
-                    <Image
-                        source={require('../assets/images/facebook.png')} // Replace with your image path
-                        style={styles.image}
-                    />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.iconWrapper}>
-                    <Image
-                        source={require('../assets/images/twitter.png')} // Replace with your image path
-                        style={styles.image}
-                    />
-                </TouchableOpacity>
-            </View>
-            <View style={styles.footer}>
-                <Text style={styles.footerText}>
-                    Don't have an account?{' '}
-                    <Text style={styles.signUp} onPress={() => router.push('/register')}>
-                        Sign up!
+
+                <Text style={styles.orText}>- Or continue with -</Text>
+                <View style={styles.iconContainer}>
+                    <TouchableOpacity style={styles.iconWrapper}>
+                        <Image
+                            source={require('../assets/images/google.png')}
+                            style={styles.image}
+                        />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.iconWrapper}>
+                        <Image
+                            source={require('../assets/images/facebook.png')}
+                            style={styles.image}
+                        />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.iconWrapper}>
+                        <Image
+                            source={require('../assets/images/twitter.png')}
+                            style={styles.image}
+                        />
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.footer}>
+                    <Text style={styles.footerText}>
+                        Don't have an account?{' '}
+                        <Text style={styles.signUp} onPress={() => router.push('/register')}>
+                            Register
+                        </Text>
                     </Text>
-                </Text>
-            </View>
-        </View>
+                </View>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </LinearGradient>
     );
 }
 
 const styles = StyleSheet.create({
-    wrapper: {
+    flex: {
+      flex: 1,
+    },
+    gradient: {
         flex: 1,
-        padding: 20,
-        backgroundColor: '#ffffff',
+        justifyContent: 'center',
+    },
+    scrollContainer: {
+      flexGrow: 1,
+      padding: 24,
+      justifyContent: 'center',
+    },
+    card: {
+      backgroundColor: '#ffffff',
+      borderRadius: 24,
+      padding: 24,
+      shadowColor: '#000',
+      shadowOpacity: 0.08,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 6,
     },
     title: {
-        fontSize: 24,
-        fontWeight: '900',
+        fontSize: 26,
+        fontWeight: '800',
         textAlign: 'center',
-        marginBottom: 20,
-        color: 'blue',
-        paddingVertical: 50,
+        marginBottom: 8,
+        color: '#1a237e',
     },
     subtitle: {
-        fontSize: 16,
-        marginBottom: 20,
-        color: '#666',
-        fontWeight: 'bold',
+        fontSize: 15,
+        marginBottom: 24,
+        color: '#64748B',
+        textAlign: 'center',
+    },
+    form: {
+      marginBottom: 16,
     },
     input: {
-        backgroundColor: '#f0f0f0',
+        backgroundColor: '#f8fafc',
         marginBottom: 20,
         padding: 10,
-        borderRadius: 4,
-        height: 50,
+        borderRadius: 12,
+        height: 52,
         borderWidth: 1,
-        borderColor: '#ccc',
+        borderColor: '#e2e8f0',
+        fontSize: 15,
+        color: '#0f172a',
     },
     button: {
-        backgroundColor: '#575757',
-        paddingVertical: 15,
-        borderRadius: 8,
+        backgroundColor: '#1a237e',
+        paddingVertical: 16,
+        borderRadius: 12,
         justifyContent: 'center',
         alignItems: 'center',
+        marginTop: 8,
     },
     buttonText: {
         color: 'white',
-        fontSize: 16,
-        fontWeight: 'bold',
+        fontSize: 17,
+        fontWeight: '600',
     },
     orText: {
         textAlign: 'center',
         marginVertical: 20,
-        color: '#575757',
+        color: '#94a3b8',
     },
     iconContainer: {
         flexDirection: 'row',
@@ -193,8 +231,8 @@ const styles = StyleSheet.create({
         elevation: 5, // For Android shadow
     },
     image: {
-        width: 30,
-        height: 30, // Adjusted size
+        width: 28,
+        height: 28,
         resizeMode: 'contain',
     },
     footer: {
@@ -202,13 +240,13 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     footerText: {
-        fontSize: 14,
-        color: '#666',
+        fontSize: 15,
+        color: '#94a3b8',
         marginTop: 30,
     },
     signUp: {
-        fontSize: 14,
-        color: '#007BFF',
-        fontWeight: 'bold',
+        fontSize: 15,
+        color: '#1a237e',
+        fontWeight: '700',
     },
 });

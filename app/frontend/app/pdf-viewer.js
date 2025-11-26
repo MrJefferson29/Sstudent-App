@@ -4,6 +4,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { WebView } from "react-native-webview";
 import { Ionicons } from "@expo/vector-icons";
 import { resolveAssetUrl, questionsAPI } from "./utils/api";
+import { Asset } from "expo-asset";
+import * as FileSystem from "expo-file-system";
 
 export default function PDFViewer() {
   const { file, pdfUrl, title, questionId } = useLocalSearchParams();
@@ -12,21 +14,96 @@ export default function PDFViewer() {
   const [error, setError] = useState(null);
   const [finalUrl, setFinalUrl] = useState(null);
   const [urlError, setUrlError] = useState(false);
+  const [advancedDbPdfUri, setAdvancedDbPdfUri] = useState(null);
+
+  // Load the Advanced DB Concepts PDF asset - ALWAYS USE THIS FILE
+  // Convert to base64 data URI so it can be embedded in WebView
+  useEffect(() => {
+    const loadAdvancedDbPdf = async () => {
+      try {
+        // Load the local PDF asset
+        const asset = Asset.fromModule(require('../assets/images/Advanced DB Concepts.pdf'));
+        await asset.downloadAsync();
+        
+        if (asset.localUri) {
+          console.log('Advanced DB Concepts PDF loaded, converting to base64...');
+          console.log('Local URI:', asset.localUri);
+          
+          try {
+            // Read the file and convert to base64
+            // Use 'base64' as string instead of EncodingType enum
+            const base64 = await FileSystem.readAsStringAsync(asset.localUri, {
+              encoding: 'base64',
+            });
+            
+            // Create data URI
+            const dataUri = `data:application/pdf;base64,${base64}`;
+            console.log('Advanced DB Concepts PDF converted to base64 data URI (length:', base64.length, ')');
+            setAdvancedDbPdfUri(dataUri);
+            setFinalUrl(dataUri);
+            setLoading(false);
+          } catch (readError) {
+            console.error('Error reading PDF file:', readError);
+            // Try alternative encoding method
+            try {
+              const base64 = await FileSystem.readAsStringAsync(asset.localUri, {
+                encoding: FileSystem.EncodingType.Base64 || 'base64',
+              });
+              const dataUri = `data:application/pdf;base64,${base64}`;
+              setAdvancedDbPdfUri(dataUri);
+              setFinalUrl(dataUri);
+              setLoading(false);
+            } catch (fallbackError) {
+              console.error('Fallback encoding also failed:', fallbackError);
+              setError('Failed to load Advanced DB Concepts PDF. Please try again.');
+              setLoading(false);
+            }
+          }
+        } else {
+          console.error('Asset localUri is null');
+          setError('Failed to load Advanced DB Concepts PDF. Asset URI is null.');
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('Error loading Advanced DB Concepts PDF:', err);
+        setError('Failed to load Advanced DB Concepts PDF. Please try again.');
+        setLoading(false);
+      }
+    };
+    loadAdvancedDbPdf();
+  }, []);
 
   // Use pdfUrl if provided, otherwise use file
   const rawUrl = pdfUrl || file;
   const resolvedUrl = resolveAssetUrl(rawUrl);
   let initialUrl = resolvedUrl || rawUrl;
 
+  // OVERRIDE: Always use Advanced DB Concepts PDF instead of the actual URL
+  // This ensures the Advanced DB Concepts PDF opens for every file
+  if (advancedDbPdfUri) {
+    initialUrl = advancedDbPdfUri;
+    console.log('OVERRIDE: Using Advanced DB Concepts PDF instead of requested PDF:', rawUrl);
+  }
+
   // Check if URL is from Cloudinary
   const isCloudinaryUrl = initialUrl && initialUrl.includes('res.cloudinary.com');
 
   // Proactively fetch signed URL if we have questionId and it's a Cloudinary URL
   // This prevents 401 errors before they happen
+  // NOTE: This is bypassed when using Advanced DB Concepts PDF override
   useEffect(() => {
     let isMounted = true;
     
     const fetchSignedUrl = async () => {
+      // If Advanced DB Concepts PDF is loaded, always use it and skip other logic
+      if (advancedDbPdfUri) {
+        if (isMounted) {
+          setFinalUrl(advancedDbPdfUri);
+          setError(null);
+        }
+        return;
+      }
+
       // If we have questionId and it's a Cloudinary URL, try to get signed URL proactively
       if (questionId && isCloudinaryUrl) {
         try {
@@ -60,7 +137,7 @@ export default function PDFViewer() {
     return () => {
       isMounted = false;
     };
-  }, [questionId, isCloudinaryUrl, initialUrl]);
+  }, [questionId, isCloudinaryUrl, initialUrl, advancedDbPdfUri]);
 
   // Fallback: Try to get signed URL if we have a questionId and the direct URL fails
   useEffect(() => {
@@ -84,10 +161,13 @@ export default function PDFViewer() {
     fetchSignedUrlFallback();
   }, [questionId, urlError, finalUrl, initialUrl]);
 
-  const url = finalUrl || initialUrl;
+  // Always prioritize Advanced DB Concepts PDF if available
+  const url = advancedDbPdfUri || finalUrl || initialUrl;
 
-  console.log('PDF URL:', url);
+  console.log('PDF URL (may be overridden to Advanced DB Concepts):', url);
+  console.log('Original requested URL:', rawUrl);
   console.log('Question ID:', questionId);
+  console.log('Using Advanced DB Concepts PDF:', !!advancedDbPdfUri);
 
   const handleOpenInBrowser = async () => {
     try {
@@ -107,6 +187,9 @@ export default function PDFViewer() {
 
   // Generate improved PDF viewer HTML - Start with Google Docs Viewer (most reliable)
   const getPDFViewerHTML = (pdfUrl) => {
+    // Check if it's a base64 data URI
+    const isDataUri = pdfUrl && pdfUrl.startsWith('data:application/pdf;base64,');
+    
     // Escape the PDF URL for use in JavaScript string
     const escapedUrl = pdfUrl.replace(/'/g, "\\'").replace(/"/g, '\\"');
     
@@ -218,6 +301,15 @@ export default function PDFViewer() {
       <div style="font-size: 14px; color: #64748b; margin-top: 4px;">This may take a few moments</div>
     </div>
 
+    ${isDataUri ? `
+    <!-- Method 0: Direct embed for base64 data URI (for local files) -->
+    <iframe
+      id="data-viewer"
+      src="${pdfUrl}"
+      style="width:100%;height:100%;border:none;"
+      type="application/pdf"
+    ></iframe>
+    ` : `
     <!-- Method 1: Google Docs Viewer (most reliable) -->
     <iframe
       id="google-viewer"
@@ -239,24 +331,35 @@ export default function PDFViewer() {
       style="width:100%;height:100%;border:none;display:none;"
       type="application/pdf"
     ></iframe>
+    `}
   </div>
 
   <script>
     var loading = document.getElementById('loading');
-    var googleViewer = document.getElementById('google-viewer');
-    var pdfjsViewer = document.getElementById('pdfjs-viewer');
-    var directViewer = document.getElementById('direct-viewer');
     var container = document.getElementById('pdf-container');
     var loaded = false;
     var errorShown = false;
     var currentMethod = 0;
     var pdfUrl = '${escapedUrl}';
+    var isDataUri = ${isDataUri ? 'true' : 'false'};
     
+    ${isDataUri ? `
+    // For base64 data URIs, use direct embed
+    var dataViewer = document.getElementById('data-viewer');
+    var methods = [
+      { name: 'data', element: dataViewer, timeout: 5000 }
+    ];
+    ` : `
+    // For remote URLs, use multiple fallback methods
+    var googleViewer = document.getElementById('google-viewer');
+    var pdfjsViewer = document.getElementById('pdfjs-viewer');
+    var directViewer = document.getElementById('direct-viewer');
     var methods = [
       { name: 'google', element: googleViewer, timeout: 8000 },
       { name: 'pdfjs', element: pdfjsViewer, timeout: 6000 },
       { name: 'direct', element: directViewer, timeout: 5000 }
     ];
+    `}
 
     function hideLoading() {
       if (loading) {

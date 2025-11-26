@@ -80,7 +80,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
 }));
 
 // Database connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/studentapp';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://mrjfsn30:CHAINXAU.29j@cluster0.tuwn9dk.mongodb.net/?appName=Cluster0';
 mongoose.connect(MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
