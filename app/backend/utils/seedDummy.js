@@ -1,5 +1,6 @@
 const Contest = require('../models/Contest');
 const Contestant = require('../models/Contestant');
+const User = require('../models/User');
 
 async function seedDummyDataIfEmpty() {
   try {
@@ -13,6 +14,19 @@ async function seedDummyDataIfEmpty() {
 
     console.log('[Seed] Seeding dummy contests and contestants...');
 
+    // Ensure there is at least one admin user for createdBy reference
+    let adminUser = await User.findOne({ role: 'admin' });
+    if (!adminUser) {
+      adminUser = await User.create({
+        name: 'Seed Admin',
+        email: 'seed-admin@example.com',
+        password: 'Password123!',
+        role: 'admin',
+        profileCompleted: true,
+      });
+      console.log('[Seed] Created fallback admin user seed-admin@example.com / Password123!');
+    }
+
     const contests = [
       {
         name: 'Mr. University of Bamenda',
@@ -20,6 +34,7 @@ async function seedDummyDataIfEmpty() {
         isActive: true,
         startAt: new Date(),
         endAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        createdBy: adminUser._id,
       },
       {
         name: 'Miss University of Bamenda',
@@ -27,6 +42,7 @@ async function seedDummyDataIfEmpty() {
         isActive: true,
         startAt: new Date(),
         endAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        createdBy: adminUser._id,
       },
       {
         name: 'Best Dressed Student',
@@ -34,6 +50,7 @@ async function seedDummyDataIfEmpty() {
         isActive: true,
         startAt: new Date(),
         endAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        createdBy: adminUser._id,
       },
       {
         name: 'Most Talented Student',
@@ -41,6 +58,7 @@ async function seedDummyDataIfEmpty() {
         isActive: true,
         startAt: new Date(),
         endAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        createdBy: adminUser._id,
       },
     ];
 

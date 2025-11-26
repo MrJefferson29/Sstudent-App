@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect } from 'react';
-import { Alert, TextInput, TouchableOpacity, View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient'; // Added LinearGradient import
+import { Alert, TextInput, TouchableOpacity, View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import axios from 'axios';
 import { AuthContext } from './Contexts/AuthContext';
 import { router } from 'expo-router';
@@ -141,9 +141,22 @@ export default function Register() {
                   />
                 </View>
 
-                <TouchableOpacity style={styles.button} onPress={handleRegister}>
-                    <Text style={styles.buttonText}>Sign up</Text>
-                </TouchableOpacity>
+              <TouchableOpacity style={styles.button} onPress={handleRegister}>
+                  <Text style={styles.buttonText}>Register</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.orText}>- Or continue with -</Text>
+              <View style={styles.socialRow}>
+                <TouchableOpacity style={styles.iconWrapper}>
+                    <Image source={require('../assets/images/google.png')} style={styles.image}/>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.iconWrapper}>
+                    <Image source={require('../assets/images/facebook.png')} style={styles.image}/>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.iconWrapper}>
+                    <Image source={require('../assets/images/twitter.png')} style={styles.image}/>
+                </TouchableOpacity>
+              </View>
 
                 <View style={styles.footer}>
                     <Text style={styles.footerText}>
@@ -223,6 +236,32 @@ const styles = StyleSheet.create({
         fontSize: 17,
         fontWeight: '600',
     },
+    orText: {
+      textAlign: 'center',
+      marginTop: 24,
+      color: '#94a3b8',
+    },
+    socialRow: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      marginTop: 16,
+    },
+    iconWrapper: {
+        backgroundColor: '#ffffff',
+        borderRadius: 10,
+        padding: 10,
+        marginHorizontal: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 5,
+        elevation: 5,
+    },
+    image: {
+        width: 28,
+        height: 28,
+        resizeMode: 'contain',
+    },
     footer: {
         marginTop: 30,
         alignItems: 'center',

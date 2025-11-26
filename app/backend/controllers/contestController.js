@@ -1,6 +1,7 @@
 const Contest = require('../models/Contest');
 const Contestant = require('../models/Contestant');
 const Vote = require('../models/Vote');
+const User = require('../models/User');
 const { uploadBuffer, deleteResource } = require('../utils/cloudinary');
 
 const normalizeContestant = (contestant) => {
@@ -252,6 +253,15 @@ exports.getContestStats = async (req, res) => {
 // Seed dummy data for contests and contestants
 exports.seedDummyData = async (req, res) => {
   try {
+    let createdBy = req.userId;
+    if (!createdBy) {
+      const admin = await User.findOne({ role: 'admin' });
+      if (!admin) {
+        return res.status(400).json({ success: false, message: 'No admin user found to assign as contest creator' });
+      }
+      createdBy = admin._id;
+    }
+
     // Create contests
     const contests = [
       {
@@ -259,7 +269,8 @@ exports.seedDummyData = async (req, res) => {
         description: 'Vote for the most outstanding male student',
         isActive: true,
         startAt: new Date(),
-        endAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+        endAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        createdBy,
       },
       {
         name: 'Miss University of Bamenda',
@@ -267,6 +278,7 @@ exports.seedDummyData = async (req, res) => {
         isActive: true,
         startAt: new Date(),
         endAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        createdBy,
       },
       {
         name: 'Best Dressed Student',
@@ -274,6 +286,7 @@ exports.seedDummyData = async (req, res) => {
         isActive: true,
         startAt: new Date(),
         endAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        createdBy,
       },
       {
         name: 'Most Talented Student',
@@ -281,6 +294,7 @@ exports.seedDummyData = async (req, res) => {
         isActive: true,
         startAt: new Date(),
         endAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        createdBy,
       }
     ];
 
