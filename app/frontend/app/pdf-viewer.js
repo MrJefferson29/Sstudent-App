@@ -18,34 +18,71 @@ export default function PDFViewer() {
   const resolvedUrl = resolveAssetUrl(rawUrl);
   let initialUrl = resolvedUrl || rawUrl;
 
-  // Try to get signed URL if we have a questionId and the direct URL fails
+  // Check if URL is from Cloudinary
+  const isCloudinaryUrl = initialUrl && initialUrl.includes('res.cloudinary.com');
+
+  // Proactively fetch signed URL if we have questionId and it's a Cloudinary URL
+  // This prevents 401 errors before they happen
   useEffect(() => {
+    let isMounted = true;
+    
     const fetchSignedUrl = async () => {
-      if (questionId && urlError && !finalUrl) {
+      // If we have questionId and it's a Cloudinary URL, try to get signed URL proactively
+      if (questionId && isCloudinaryUrl) {
         try {
-          console.log('Attempting to get signed URL for question:', questionId);
+          console.log('Proactively fetching signed URL for Cloudinary PDF, question:', questionId);
           const response = await questionsAPI.getSignedUrl(questionId);
-          if (response.success && response.url) {
-            console.log('Got signed URL:', response.url);
+          if (isMounted && response.success && response.url) {
+            console.log('Got signed URL (proactive):', response.url);
+            console.log('Is signed URL:', response.isSigned);
             setFinalUrl(response.url);
-            setUrlError(false);
             setError(null);
+            return;
           }
         } catch (err) {
-          console.error('Error fetching signed URL:', err);
+          console.error('Error fetching signed URL (proactive):', err);
+          // Fall back to direct URL if signed URL fetch fails
+          if (isMounted && initialUrl) {
+            console.log('Falling back to direct URL');
+            setFinalUrl(initialUrl);
+          }
+        }
+      } else if (initialUrl) {
+        // Set initial URL if we don't have questionId or it's not Cloudinary
+        if (isMounted) {
+          setFinalUrl(initialUrl);
         }
       }
     };
 
     fetchSignedUrl();
-  }, [questionId, urlError, finalUrl]);
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [questionId, isCloudinaryUrl, initialUrl]);
 
-  // Set initial URL
+  // Fallback: Try to get signed URL if we have a questionId and the direct URL fails
   useEffect(() => {
-    if (initialUrl && !finalUrl) {
-      setFinalUrl(initialUrl);
-    }
-  }, [initialUrl]);
+    const fetchSignedUrlFallback = async () => {
+      if (questionId && urlError && finalUrl === initialUrl) {
+        try {
+          console.log('Fallback: Attempting to get signed URL for question:', questionId);
+          const response = await questionsAPI.getSignedUrl(questionId);
+          if (response.success && response.url) {
+            console.log('Got signed URL (fallback):', response.url);
+            setFinalUrl(response.url);
+            setUrlError(false);
+            setError(null);
+          }
+        } catch (err) {
+          console.error('Error fetching signed URL (fallback):', err);
+        }
+      }
+    };
+
+    fetchSignedUrlFallback();
+  }, [questionId, urlError, finalUrl, initialUrl]);
 
   const url = finalUrl || initialUrl;
 

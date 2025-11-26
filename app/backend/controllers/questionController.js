@@ -252,7 +252,7 @@ exports.getSignedPdfUrl = async (req, res) => {
       });
     }
 
-    if (!question.pdfPublicId) {
+    if (!question.pdfPublicId && !question.pdfUrl) {
       return res.status(400).json({
         success: false,
         message: 'Question does not have a PDF',
@@ -260,7 +260,11 @@ exports.getSignedPdfUrl = async (req, res) => {
     }
 
     // Try to get an accessible URL (public or signed)
-    const accessibleUrl = await getAccessibleUrl(question.pdfPublicId, 'raw');
+    // Use pdfPublicId if available, otherwise extract from pdfUrl
+    const identifier = question.pdfPublicId || question.pdfUrl;
+    console.log(`Getting accessible URL for question ${req.params.id}, identifier:`, identifier);
+    
+    const accessibleUrl = await getAccessibleUrl(identifier, 'raw');
 
     if (!accessibleUrl) {
       return res.status(500).json({
@@ -269,10 +273,13 @@ exports.getSignedPdfUrl = async (req, res) => {
       });
     }
 
+    const isSigned = accessibleUrl.includes('signature=') || accessibleUrl.includes('expires_at=');
+    console.log(`Generated ${isSigned ? 'signed' : 'direct'} URL for question ${req.params.id}`);
+
     res.status(200).json({
       success: true,
       url: accessibleUrl,
-      isSigned: accessibleUrl.includes('signature='), // Check if it's a signed URL
+      isSigned, // Check if it's a signed URL
     });
   } catch (error) {
     console.error('Get signed PDF URL error:', error);

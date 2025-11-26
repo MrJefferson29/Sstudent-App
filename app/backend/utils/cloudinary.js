@@ -111,6 +111,8 @@ const getSignedUrl = (publicId, options = {}) => {
   } = options;
 
   try {
+    // For signed URLs, we need to use the authenticated type and sign it
+    // This works even if the resource is marked as "authenticated" or "private"
     const signedUrl = cloudinary.url(publicId, {
       resource_type,
       type: 'authenticated', // Use authenticated type for signed URLs
@@ -120,16 +122,68 @@ const getSignedUrl = (publicId, options = {}) => {
       ...(transformation && { transformation }),
     });
 
+    console.log(`Generated signed URL for ${publicId} (expires in ${expires_in}s)`);
     return signedUrl;
   } catch (error) {
     console.error(`Error generating signed URL for ${publicId}:`, error);
+    // Fallback: try without type specification
+    try {
+      const fallbackUrl = cloudinary.url(publicId, {
+        resource_type,
+        sign_url: true,
+        expires_at: Math.floor(Date.now() / 1000) + expires_in,
+        secure: true,
+      });
+      console.log(`Generated fallback signed URL for ${publicId}`);
+      return fallbackUrl;
+    } catch (fallbackError) {
+      console.error(`Fallback signed URL generation also failed for ${publicId}:`, fallbackError);
+      return null;
+    }
+  }
+};
+
+// Extract public_id from a Cloudinary URL
+const extractPublicIdFromUrl = (url) => {
+  if (!url || typeof url !== 'string') return null;
+  
+  try {
+    // Cloudinary URL format: https://res.cloudinary.com/{cloud_name}/{resource_type}/upload/{version}/{public_id}.{format}
+    // Example: https://res.cloudinary.com/da57ehczx/raw/upload/v1764107967/questions/dcqfvgvxllmfhikn3yer.pdf
+    const match = url.match(/\/upload\/(?:v\d+\/)?(.+?)(?:\.[^.]+)?$/);
+    if (match && match[1]) {
+      return match[1];
+    }
+    
+    // Alternative format: https://res.cloudinary.com/{cloud_name}/{resource_type}/upload/{public_id}
+    const altMatch = url.match(/\/upload\/(.+)$/);
+    if (altMatch && altMatch[1]) {
+      return altMatch[1].replace(/^v\d+\//, ''); // Remove version prefix if present
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error extracting public_id from URL:', error);
     return null;
   }
 };
 
 // Get a public URL (preferred) or signed URL (fallback) for a resource
-const getAccessibleUrl = async (publicId, resourceType = 'raw') => {
-  if (!publicId) return null;
+const getAccessibleUrl = async (publicIdOrUrl, resourceType = 'raw') => {
+  if (!publicIdOrUrl) return null;
+
+  // If it's a URL, extract the public_id
+  let publicId = publicIdOrUrl;
+  if (publicIdOrUrl.includes('res.cloudinary.com')) {
+    publicId = extractPublicIdFromUrl(publicIdOrUrl);
+    if (!publicId) {
+      console.error('Could not extract public_id from URL:', publicIdOrUrl);
+      // If we can't extract, try to generate signed URL from the URL itself
+      // This is a fallback - Cloudinary might accept the full URL path
+      return getSignedUrl(publicIdOrUrl.replace(/^https?:\/\/[^\/]+/, ''), { resource_type: resourceType });
+    }
+    console.log(`Extracted public_id from URL: ${publicId}`);
+  }
 
   try {
     // First, try to get the resource info to check its access mode
@@ -137,20 +191,36 @@ const getAccessibleUrl = async (publicId, resourceType = 'raw') => {
       resource_type: resourceType,
     });
 
-    // If it's public, return the direct URL
+    console.log(`Resource info for ${publicId}:`, {
+      access_mode: resource.access_mode,
+      type: resource.type,
+      secure_url: resource.secure_url,
+    });
+
+    // If it's public and type is upload, return the direct URL
     if (resource.access_mode === 'public' && resource.type === 'upload') {
-      return cloudinary.url(publicId, {
+      const directUrl = cloudinary.url(publicId, {
         resource_type: resourceType,
         secure: true,
       });
+      console.log(`Using direct URL for ${publicId}:`, directUrl);
+      return directUrl;
     }
 
-    // Otherwise, generate a signed URL
-    return getSignedUrl(publicId, { resource_type: resourceType });
+    // If it's not public or type is not upload, generate a signed URL
+    console.log(`Resource is not fully public (access_mode: ${resource.access_mode}, type: ${resource.type}), generating signed URL for ${publicId}`);
+    const signedUrl = getSignedUrl(publicId, { resource_type: resourceType });
+    console.log(`Generated signed URL for ${publicId}:`, signedUrl);
+    return signedUrl;
   } catch (error) {
     console.error(`Error getting accessible URL for ${publicId}:`, error);
     // Fallback: try to generate signed URL anyway
-    return getSignedUrl(publicId, { resource_type: resourceType });
+    console.log(`Fallback: Generating signed URL for ${publicId}`);
+    const signedUrl = getSignedUrl(publicId, { resource_type: resourceType });
+    if (!signedUrl) {
+      console.error(`Failed to generate signed URL for ${publicId}`);
+    }
+    return signedUrl;
   }
 };
 
@@ -161,5 +231,6 @@ module.exports = {
   updateAccessMode,
   getSignedUrl,
   getAccessibleUrl,
+  extractPublicIdFromUrl,
 };
 
