@@ -47,6 +47,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 30000, // 30 second timeout
 });
 
 // Add token to requests if available
@@ -103,24 +104,26 @@ export const questionsAPI = {
   },
   
   // Get all questions with optional filters
-  getAll: async (filters = {}) => {
+  getAll: async (filters = {}, signal = null) => {
     const params = new URLSearchParams();
     if (filters.department) params.append('department', filters.department);
     if (filters.level) params.append('level', filters.level);
     if (filters.subject) params.append('subject', filters.subject);
     if (filters.year) params.append('year', filters.year);
 
-    const response = await api.get(`/questions?${params.toString()}`);
+    const config = signal ? { signal } : {};
+    const response = await api.get(`/questions?${params.toString()}`, config);
     return response.data;
   },
 
   // Get unique subjects for a department and level
-  getSubjects: async (departmentId, level) => {
+  getSubjects: async (departmentId, level, signal = null) => {
     const params = new URLSearchParams();
     if (departmentId) params.append('department', departmentId);
     if (level) params.append('level', level);
 
-    const response = await api.get(`/questions/subjects?${params.toString()}`);
+    const config = signal ? { signal } : {};
+    const response = await api.get(`/questions/subjects?${params.toString()}`, config);
     return response.data;
   },
 
@@ -133,11 +136,12 @@ export const questionsAPI = {
 
 // Courses API
 export const coursesAPI = {
-  getAll: async (departmentId = null, level = null) => {
+  getAll: async (departmentId = null, level = null, signal = null) => {
     const params = new URLSearchParams();
     if (departmentId) params.append('department', departmentId);
     if (level) params.append('level', level);
-    const response = await api.get(`/courses?${params.toString()}`);
+    const config = signal ? { signal } : {};
+    const response = await api.get(`/courses?${params.toString()}`, config);
     return response.data;
   },
 
@@ -219,8 +223,9 @@ export const solutionsAPI = {
 // Scholarships API
 export const scholarshipsAPI = {
   // Get all scholarships
-  getAll: async () => {
-    const response = await api.get('/scholarships');
+  getAll: async (signal = null) => {
+    const config = signal ? { signal } : {};
+    const response = await api.get('/scholarships', config);
     return response.data;
   },
 
@@ -234,8 +239,9 @@ export const scholarshipsAPI = {
 // Internships API
 export const internshipsAPI = {
   // Get all internships
-  getAll: async () => {
-    const response = await api.get('/internships');
+  getAll: async (signal = null) => {
+    const config = signal ? { signal } : {};
+    const response = await api.get('/internships', config);
     return response.data;
   },
 
@@ -371,14 +377,15 @@ export const liveSessionsAPI = {
 
 // Library API
 export const libraryAPI = {
-  getAll: async (filters = {}) => {
+  getAll: async (filters = {}, signal = null) => {
     const params = new URLSearchParams();
 
     if (filters.category) params.append('category', filters.category);
     if (filters.author) params.append('author', filters.author);
     if (filters.query) params.append('query', filters.query);
 
-    const response = await api.get(`/library?${params.toString()}`);
+    const config = signal ? { signal } : {};
+    const response = await api.get(`/library?${params.toString()}`, config);
     return response.data;
   },
 

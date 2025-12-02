@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useMemo } from "react";
 import {
   View,
   Text,
@@ -13,76 +13,56 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { questionsAPI, resolveAssetUrl } from "./utils/api";
+import { useOptimizedFetch } from "./utils/useOptimizedFetch";
 
 export default function PastQuestions() {
   const { departmentId, departmentName, level, subject } = useLocalSearchParams();
   const router = useRouter();
-  const [questions, setQuestions] = useState([]);
-  const [groupedQuestions, setGroupedQuestions] = useState({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
 
-  // Fetch questions from backend
-  useEffect(() => {
-    fetchQuestions();
-  }, [departmentId, level, subject]);
-
-  const fetchQuestions = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      console.log('Fetching questions with filters:', { department: departmentId, level, subject });
-      
-      const response = await questionsAPI.getAll({
+  // Optimized fetch with caching
+  const { data: response, isLoading, error, refreshing, refresh } = useOptimizedFetch(
+    async (signal) => {
+      const result = await questionsAPI.getAll({
         department: departmentId,
         level,
         subject,
-      });
-
-      console.log('Questions API response:', response);
-
-      if (response.success) {
-        const questionsData = response.data || [];
-        console.log('Questions data received:', questionsData.length, 'questions');
-        setQuestions(questionsData);
-        
-        // Group questions by year
-        const grouped = {};
-        questionsData.forEach((question) => {
-          const year = question.year;
-          if (!grouped[year]) {
-            grouped[year] = [];
-          }
-          grouped[year].push(question);
-        });
-        
-        // Sort years in descending order
-        const sortedYears = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
-        const sortedGrouped = {};
-        sortedYears.forEach((year) => {
-          sortedGrouped[year] = grouped[year];
-        });
-        
-        setGroupedQuestions(sortedGrouped);
-      } else {
-        setError("Failed to load questions");
+      }, signal);
+      if (!result.success) {
+        throw new Error(result.message || "Failed to load questions");
       }
-    } catch (err) {
-      console.error("Error fetching questions:", err);
-      console.error("Error response:", err.response?.data);
-      setError(err.response?.data?.message || "Failed to load questions. Please try again.");
-    } finally {
-      setIsLoading(false);
-      setRefreshing(false);
+      return result;
+    },
+    [departmentId, level, subject],
+    {
+      cacheDuration: 10 * 60 * 1000, // 10 minutes cache
+      refetchOnMount: true, // Fetch in background to update cache
     }
-  };
+  );
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchQuestions();
-  };
+  // Memoize expensive grouping operation
+  const groupedQuestions = useMemo(() => {
+    if (!response?.data) return {};
+    
+    const questionsData = response.data || [];
+    const grouped = {};
+    
+    questionsData.forEach((question) => {
+      const year = question.year;
+      if (!grouped[year]) {
+        grouped[year] = [];
+      }
+      grouped[year].push(question);
+    });
+    
+    // Sort years in descending order
+    const sortedYears = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+    const sortedGrouped = {};
+    sortedYears.forEach((year) => {
+      sortedGrouped[year] = grouped[year];
+    });
+    
+    return sortedGrouped;
+  }, [response?.data]);
 
   // Open PDF in the app's PDF viewer
   const openPDF = (questionObj) => {
@@ -275,7 +255,7 @@ export default function PastQuestions() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: 20, paddingBottom: 20 }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={refresh} />
         }
       >
         {Object.entries(groupedQuestions).map(([year, yearQuestions]) => (

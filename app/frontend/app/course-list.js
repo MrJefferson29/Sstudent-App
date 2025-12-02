@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -13,42 +13,29 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { coursesAPI, resolveAssetUrl } from "./utils/api";
+import { useOptimizedFetch } from "./utils/useOptimizedFetch";
 
 export default function CourseList() {
   const { departmentId, departmentName, level } = useLocalSearchParams();
   const router = useRouter();
-  const [courses, setCourses] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    fetchCourses();
-  }, [departmentId, level]);
-
-  const fetchCourses = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const response = await coursesAPI.getAll(departmentId, level);
-      if (response.success) {
-        setCourses(response.data || []);
-      } else {
-        setError("Failed to load courses");
+  // Optimized fetch with caching
+  const { data: response, isLoading, error, refreshing, refresh } = useOptimizedFetch(
+    async (signal) => {
+      const result = await coursesAPI.getAll(departmentId, level, signal);
+      if (!result.success) {
+        throw new Error(result.message || "Failed to load courses");
       }
-    } catch (err) {
-      console.error("Error fetching courses:", err);
-      setError("Failed to load courses. Please try again.");
-    } finally {
-      setIsLoading(false);
-      setRefreshing(false);
+      return result;
+    },
+    [departmentId, level],
+    {
+      cacheDuration: 10 * 60 * 1000, // 10 minutes cache
+      refetchOnMount: true,
     }
-  };
+  );
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchCourses();
-  };
+  const courses = response?.data || [];
 
   const handleCoursePress = (course) => {
     router.push({
@@ -116,7 +103,7 @@ export default function CourseList() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingTop: 20, paddingBottom: 20 }}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            <RefreshControl refreshing={refreshing} onRefresh={refresh} />
           }
         >
           {courses.map((course) => (

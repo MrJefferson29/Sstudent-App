@@ -1,10 +1,6 @@
-const fs = require('fs');
-const path = require('path');
 const Book = require('../models/Book');
 const User = require('../models/User');
-
-const LIBRARY_DIR = path.join(__dirname, '..', 'uploads', 'library');
-fs.mkdirSync(LIBRARY_DIR, { recursive: true });
+const { uploadBuffer, deleteResource, getPublicUrl } = require('../utils/storage');
 
 const ensureAdmin = async (userId) => {
   const user = await User.findById(userId);
@@ -18,34 +14,8 @@ const ensureAdmin = async (userId) => {
 
 const buildBookResponse = (book, req) => {
   const data = book.toObject ? book.toObject() : book;
-  const baseUrl = `${req.protocol}://${req.get('host')}`;
-  return {
-    ...data,
-    pdfUrl: data.pdfUrl?.startsWith('http') ? data.pdfUrl : `${baseUrl}${data.pdfUrl}`,
-  };
-};
-
-const savePdfToDisk = async (file) => {
-  const safeName = file.originalname.replace(/[^\w.\-]+/g, '_');
-  const filename = `${Date.now()}-${safeName || 'book.pdf'}`;
-  const filePath = path.join(LIBRARY_DIR, filename);
-  await fs.promises.writeFile(filePath, file.buffer);
-  return `/uploads/library/${filename}`;
-};
-
-const removePdfFromDisk = async (pdfUrl) => {
-  if (!pdfUrl) return;
-  try {
-    const relativePath = pdfUrl.startsWith('/uploads/')
-      ? pdfUrl.replace('/uploads/', 'uploads/')
-      : pdfUrl;
-    const targetPath = path.join(__dirname, '..', relativePath);
-    if (fs.existsSync(targetPath)) {
-      await fs.promises.unlink(targetPath);
-    }
-  } catch (err) {
-    console.warn('Failed to remove PDF file:', err.message);
-  }
+  // pdfUrl is already a full URL from unified storage
+  return data;
 };
 
 exports.createBook = async (req, res) => {
@@ -61,7 +31,11 @@ exports.createBook = async (req, res) => {
       return res.status(400).json({ success: false, message: 'PDF file is required' });
     }
 
-    const pdfUrl = await savePdfToDisk(req.file);
+    const upload = await uploadBuffer(req.file.buffer, {
+      folder: 'library',
+      contentType: 'application/pdf',
+      filename: req.file.originalname,
+    });
 
     const book = await Book.create({
       title: title.trim(),
@@ -69,7 +43,8 @@ exports.createBook = async (req, res) => {
       category: category?.trim() || 'General',
       description: description || '',
       publishedDate: publishedDate || '',
-      pdfUrl,
+      pdfUrl: upload.secure_url,
+      pdfPublicId: upload.public_id,
       uploadedBy: req.userId,
     });
 
@@ -144,8 +119,16 @@ exports.updateBook = async (req, res) => {
     if (publishedDate !== undefined) book.publishedDate = publishedDate;
 
     if (req.file) {
-      await removePdfFromDisk(book.pdfUrl);
-      book.pdfUrl = await savePdfToDisk(req.file);
+      if (book.pdfPublicId) {
+        await deleteResource(book.pdfPublicId);
+      }
+      const upload = await uploadBuffer(req.file.buffer, {
+        folder: 'library',
+        contentType: 'application/pdf',
+        filename: req.file.originalname,
+      });
+      book.pdfUrl = upload.secure_url;
+      book.pdfPublicId = upload.public_id;
     }
 
     await book.save();
@@ -167,7 +150,9 @@ exports.deleteBook = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Book not found' });
     }
 
-    await removePdfFromDisk(book.pdfUrl);
+    if (book.pdfPublicId) {
+      await deleteResource(book.pdfPublicId);
+    }
     await Book.findByIdAndDelete(req.params.id);
     res.json({ success: true, message: 'Book deleted successfully' });
   } catch (error) {

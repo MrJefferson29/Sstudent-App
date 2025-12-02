@@ -1,7 +1,8 @@
 const Question = require('../models/Question');
 const Solution = require('../models/Solution');
 const Department = require('../models/Department');
-const { uploadBuffer, deleteResource, updateAccessMode, getSignedUrl, getAccessibleUrl } = require('../utils/cloudinary');
+// Use unified storage (supports Firebase and direct storage)
+const { uploadBuffer, deleteResource, updateAccessMode, getPublicUrl } = require('../utils/storage');
 
 // Upload a new question
 exports.uploadQuestion = async (req, res) => {
@@ -35,23 +36,8 @@ exports.uploadQuestion = async (req, res) => {
 
     const upload = await uploadBuffer(req.file.buffer, {
       folder: 'questions',
-      resource_type: 'raw',
-      format: 'pdf',
-      access_mode: 'public', // Explicitly set for PDFs
-      type: 'upload', // Ensure type is 'upload' (not 'authenticated' or 'private')
+      contentType: 'application/pdf',
     });
-
-    // Double-check and fix access mode if needed (sometimes Cloudinary ignores it)
-    if (upload.public_id) {
-      try {
-        // Verify and ensure it's public
-        await updateAccessMode(upload.public_id, 'raw');
-        console.log(`Ensured PDF ${upload.public_id} is public`);
-      } catch (error) {
-        console.warn(`Warning: Could not verify access mode for ${upload.public_id}:`, error.message);
-        // Continue anyway - the upload succeeded
-      }
-    }
 
     const question = await Question.create({
       department,

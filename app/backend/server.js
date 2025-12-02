@@ -9,6 +9,26 @@ const morgan = require('morgan'); // Already required
 
 require('dotenv').config();
 
+// Initialize storage (Supabase > Firebase > Direct)
+// Supabase is free and requires no credit card
+const { initializeSupabase } = require('./utils/supabaseStorage');
+const { initializeFirebase } = require('./utils/firebaseStorage');
+
+// Try Supabase first (free, no credit card required)
+try {
+  initializeSupabase();
+  console.log('[Storage] Using Supabase Storage for file uploads (free tier, no credit card required)');
+} catch (error) {
+  // Try Firebase if Supabase not configured
+  try {
+    initializeFirebase();
+    console.log('[Storage] Using Firebase Storage for file uploads');
+  } catch (firebaseError) {
+    console.log('[Storage] Using direct server storage (no cloud storage configured)');
+    console.log('[Storage] To use Supabase (free, no credit card): Set SUPABASE_URL and SUPABASE_ANON_KEY');
+  }
+}
+
 const app = express();
 const server = http.createServer(app);
 const { Server } = require('socket.io');

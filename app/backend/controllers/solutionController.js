@@ -1,6 +1,6 @@
 const Solution = require('../models/Solution');
 const Question = require('../models/Question');
-const { uploadBuffer, deleteResource, updateAccessMode } = require('../utils/cloudinary');
+const { uploadBuffer, deleteResource, updateAccessMode } = require('../utils/storage');
 
 // Upload a new solution
 exports.uploadSolution = async (req, res) => {
@@ -32,21 +32,8 @@ exports.uploadSolution = async (req, res) => {
     if (req.file) {
       const upload = await uploadBuffer(req.file.buffer, {
         folder: 'solutions',
-        resource_type: 'raw',
-        format: 'pdf',
-        access_mode: 'public', // Explicitly set for PDFs
-        type: 'upload', // Ensure type is 'upload' (not 'authenticated' or 'private')
+        contentType: 'application/pdf',
       });
-      
-      // Double-check and fix access mode if needed
-      if (upload.public_id) {
-        try {
-          await updateAccessMode(upload.public_id, 'raw');
-          console.log(`Ensured solution PDF ${upload.public_id} is public`);
-        } catch (error) {
-          console.warn(`Warning: Could not verify access mode for ${upload.public_id}:`, error.message);
-        }
-      }
       
       pdfUrl = upload.secure_url;
       pdfPublicId = upload.public_id;

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, StatusBar, Linking, ActivityIndicator, RefreshControl, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { internshipsAPI, resolveAssetUrl } from './utils/api';
+import { useOptimizedFetch } from './utils/useOptimizedFetch';
 
 // Dummy internship data (always displayed)
 const dummyInternships = [
@@ -42,52 +43,35 @@ const dummyInternships = [
 ];
 
 export default function InternshipsScreen() {
-  const [backendInternships, setBackendInternships] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    fetchInternships();
-  }, []);
-
-  const fetchInternships = async () => {
-    try {
-      setLoading(true);
-
-      const response = await internshipsAPI.getAll();
-
-      if (response.success) {
-        const internshipsData = response.data || [];
-        // Transform backend data to match the expected format
-        const transformedData = internshipsData.map(internship => ({
-          id: internship._id,
-          title: internship.title,
-          company: internship.company,
-          location: internship.location,
-          duration: internship.duration,
-          image: resolveAssetUrl(internship.image),
-          desc: internship.description,
-          applicationLink: internship.applicationLink,
-          isDummy: false,
-        }));
-        setBackendInternships(transformedData);
-      } else {
-        setBackendInternships([]);
+  // Optimized fetch with caching
+  const { data: response, isLoading: loading, refreshing, refresh } = useOptimizedFetch(
+    async (signal) => {
+      const result = await internshipsAPI.getAll(signal);
+      if (!result.success) {
+        return { data: [] };
       }
-    } catch (err) {
-      console.error("Error fetching internships:", err);
-      // Silently fail - dummy internships will still be shown
-      setBackendInternships([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+      // Transform backend data to match the expected format
+      const transformedData = (result.data || []).map(internship => ({
+        id: internship._id,
+        title: internship.title,
+        company: internship.company,
+        location: internship.location,
+        duration: internship.duration,
+        image: resolveAssetUrl(internship.image),
+        desc: internship.description,
+        applicationLink: internship.applicationLink,
+        isDummy: false,
+      }));
+      return { data: transformedData };
+    },
+    [],
+    {
+      cacheDuration: 10 * 60 * 1000, // 10 minutes cache
+      refetchOnMount: true,
     }
-  };
+  );
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchInternships();
-  };
+  const backendInternships = response?.data || [];
 
   // Combine backend internships (first) with dummy internships (last)
   const allInternships = [...backendInternships, ...dummyInternships];
@@ -124,7 +108,7 @@ export default function InternshipsScreen() {
         contentContainerStyle={styles.scrollContent} 
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={refresh} />
         }
       >
         {allInternships.map((item) => (

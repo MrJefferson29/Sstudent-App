@@ -1,5 +1,5 @@
 // SubjectSelect.js
-import React, { useState, useEffect } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -12,42 +12,29 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { questionsAPI } from "./utils/api";
+import { useOptimizedFetch } from "./utils/useOptimizedFetch";
 
 export default function SubjectSelect() {
   const { schoolId, schoolName, departmentId, departmentName, level } = useLocalSearchParams();
   const router = useRouter();
-  const [subjects, setSubjects] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    fetchSubjects();
-  }, [departmentId, level]);
-
-  const fetchSubjects = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const response = await questionsAPI.getSubjects(departmentId, level);
-      if (response.success) {
-        setSubjects(response.data || []);
-      } else {
-        setError("Failed to load subjects");
+  // Optimized fetch with caching
+  const { data: response, isLoading, error, refreshing, refresh } = useOptimizedFetch(
+    async (signal) => {
+      const result = await questionsAPI.getSubjects(departmentId, level, signal);
+      if (!result.success) {
+        throw new Error(result.message || "Failed to load subjects");
       }
-    } catch (err) {
-      console.error("Error fetching subjects:", err);
-      setError("Failed to load subjects. Please try again.");
-    } finally {
-      setIsLoading(false);
-      setRefreshing(false);
+      return result;
+    },
+    [departmentId, level],
+    {
+      cacheDuration: 10 * 60 * 1000, // 10 minutes cache
+      refetchOnMount: true,
     }
-  };
+  );
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchSubjects();
-  };
+  const subjects = response?.data || [];
 
   if (isLoading && !refreshing) {
     return (
@@ -114,9 +101,9 @@ export default function SubjectSelect() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           style={{ marginTop: 20 }}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={refresh} />
+        }
         >
           {subjects.map((subject, index) => (
             <TouchableOpacity
