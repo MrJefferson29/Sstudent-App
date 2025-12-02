@@ -62,11 +62,16 @@ Supabase offers **1GB free storage** and **2GB/month bandwidth** with **no credi
    - Select **"API"**
 
 2. **Copy Credentials:**
-   - **Project URL:** Copy the "Project URL" (looks like: `https://xxxxx.supabase.co`)https://hdaewovxtkbpllitzvgx.supabase.co
-   - **anon public key:** Copy the "anon public" key (starts with `eyJ...`)eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkYWV3b3Z4dGticGxsaXR6dmd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2OTk2MjYsImV4cCI6MjA4MDI3NTYyNn0.nYx6DqXVMQ6B8SW-KFwA2D5XtsmOziza0zqqp-BiR1Q
+   - **Project URL:** Copy the "Project URL" (looks like: `https://xxxxx.supabase.co`)
+   - **service_role key:** Copy the "service_role" key (starts with `eyJ...`)
+     - ⚠️ **Important:** Use the **service_role** key, NOT the anon key
+     - The service_role key bypasses Row-Level Security (RLS) for server-side uploads
+     - Scroll down to find it - it's in the "Project API keys" section
+     - It's longer than the anon key
 
 3. **Save These:**
    - You'll need both for Render environment variables
+   - **Keep the service_role key secret** - it has admin privileges!
 
 ---
 
@@ -91,8 +96,14 @@ Supabase offers **1GB free storage** and **2GB/month bandwidth** with **no credi
    - Click **"Save Changes"**
 
    **Variable 3:**
+   - **Key:** `SUPABASE_SERVICE_ROLE_KEY`
+   - **Value:** (paste your service_role key from Step 3)
+   - ⚠️ **Important:** Use the **service_role** key, NOT the anon key
+   - Click **"Save Changes"**
+
+   **Optional Variable 4 (if you want to use anon key as fallback):**
    - **Key:** `SUPABASE_ANON_KEY`
-   - **Value:** (paste your anon public key from Step 3)
+   - **Value:** (paste your anon public key - optional, only if service_role not available)
    - Click **"Save Changes"**
 
 3. **Verify:**
@@ -167,7 +178,7 @@ npm install @supabase/supabase-js
 - [ ] Environment variables set in Render:
   - [ ] `STORAGE_MODE=supabase`
   - [ ] `SUPABASE_URL` (your project URL)
-  - [ ] `SUPABASE_ANON_KEY` (your anon key)
+  - [ ] `SUPABASE_SERVICE_ROLE_KEY` (your service_role key - required for uploads)
 - [ ] Dependencies installed (`@supabase/supabase-js`)
 - [ ] Code committed and pushed
 - [ ] Render deployment successful
@@ -182,9 +193,19 @@ npm install @supabase/supabase-js
 ### Issue: "Supabase Storage not initialized"
 
 **Solution:**
-- Check that `SUPABASE_URL` and `SUPABASE_ANON_KEY` are set correctly in Render
+- Check that `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set correctly in Render
 - Verify the values match what's in Supabase Console → API
+- Make sure you're using the **service_role** key, not the anon key
 - Check Render logs for initialization errors
+
+### Issue: "new row violates row-level security policy"
+
+**Solution:**
+- This means you're using the anon key instead of the service_role key
+- Go to Supabase Console → Settings → API
+- Copy the **service_role** key (not the anon key)
+- Update `SUPABASE_SERVICE_ROLE_KEY` in Render with the service_role key
+- Redeploy your backend
 
 ### Issue: "Bucket not found" or "Bucket does not exist"
 
@@ -252,7 +273,7 @@ Once all steps are complete, your PDFs will be stored in Supabase Storage and ac
 ```env
 STORAGE_MODE=supabase
 SUPABASE_URL=https://xxxxx.supabase.co
-SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...  # Use service_role key, not anon key!
 ```
 
 **Bucket Name:** `pdfs` (must be exactly this)

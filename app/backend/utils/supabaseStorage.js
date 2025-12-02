@@ -15,16 +15,24 @@ const initializeSupabase = () => {
   }
 
   const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_ANON_KEY;
+  // Use service role key for server-side uploads (bypasses RLS)
+  // Fallback to anon key if service role not available
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Supabase credentials not found. Please set SUPABASE_URL and SUPABASE_ANON_KEY');
+    throw new Error('Supabase credentials not found. Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY)');
   }
 
   try {
-    supabase = createClient(supabaseUrl, supabaseKey);
+    supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
     isInitialized = true;
-    console.log('[Supabase] Initialized successfully');
+    const keyType = process.env.SUPABASE_SERVICE_ROLE_KEY ? 'service role' : 'anon';
+    console.log(`[Supabase] Initialized successfully with ${keyType} key`);
     return supabase;
   } catch (error) {
     console.error('[Supabase] Initialization error:', error.message);
