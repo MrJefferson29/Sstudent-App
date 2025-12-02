@@ -66,8 +66,8 @@ export default function SubjectSelect() {
         </Text>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={fetchSubjects}>
+          <Text style={styles.errorText}>{error?.message || error || "Failed to load subjects"}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={refresh}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>

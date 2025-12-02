@@ -41,7 +41,7 @@ export default function PDFViewer() {
             console.log('Advanced DB Concepts PDF converted to base64 data URI (length:', base64.length, ')');
             setAdvancedDbPdfUri(dataUri);
             setFinalUrl(dataUri);
-            setLoading(false);
+            // Don't set loading to false here - wait for WebView to confirm it's loaded
           } catch (readError) {
             console.error('Error reading PDF file:', readError);
             // Try alternative encoding method
@@ -52,7 +52,7 @@ export default function PDFViewer() {
               const dataUri = `data:application/pdf;base64,${base64}`;
               setAdvancedDbPdfUri(dataUri);
               setFinalUrl(dataUri);
-              setLoading(false);
+              // Don't set loading to false here - wait for WebView to confirm it's loaded
             } catch (fallbackError) {
               console.error('Fallback encoding also failed:', fallbackError);
               setError('Failed to load Advanced DB Concepts PDF. Please try again.');
@@ -364,6 +364,11 @@ export default function PDFViewer() {
     function hideLoading() {
       if (loading) {
         loading.style.display = 'none';
+        // Also notify React Native that loading is complete
+        if (window.ReactNativeWebView && !loaded) {
+          loaded = true;
+          window.ReactNativeWebView.postMessage('pdfLoaded');
+        }
       }
     }
 
@@ -445,9 +450,7 @@ export default function PDFViewer() {
             loaded = true;
             hideLoading();
             console.log('PDF loaded with method:', method.name);
-            if (window.ReactNativeWebView) {
-              window.ReactNativeWebView.postMessage('pdfLoaded');
-            }
+            // Message is sent in hideLoading() function
           }
         }
       }, method.timeout);
@@ -464,15 +467,13 @@ export default function PDFViewer() {
               loaded = true;
               hideLoading();
               console.log('PDF loaded with method:', method.name);
-              if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage('pdfLoaded');
-              }
+              // Message is sent in hideLoading() function
             } else if (currentMethod === index + 1) {
               // Current method is blank, try next
               tryNextMethod();
             }
           }
-        }, 2000);
+        }, 1500);
       };
       method.element.onerror = function() {
         console.log('Iframe error:', method.name);
@@ -499,12 +500,34 @@ export default function PDFViewer() {
       }
     }, 5000);
 
-    // Overall timeout - show error if nothing loads within 25 seconds
+    // Overall timeout - hide loading and show error if nothing loads within 20 seconds
     setTimeout(function() {
       if (!loaded && !errorShown) {
+        hideLoading();
         showError();
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage('pdfError');
+        }
+      } else if (loaded && loading) {
+        // If loaded but loading indicator still showing, hide it
+        hideLoading();
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage('pdfLoaded');
+        }
       }
-    }, 25000);
+    }, 20000);
+    
+    // Additional check: Hide loading after a reasonable time even if no message received
+    // This prevents infinite loading if the message system fails
+    setTimeout(function() {
+      if (loading && !errorShown) {
+        console.log('Force hiding loading after timeout');
+        hideLoading();
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage('pdfLoaded');
+        }
+      }
+    }, 15000);
 
     // Handle messages from React Native
     if (window.ReactNativeWebView) {
@@ -551,8 +574,8 @@ export default function PDFViewer() {
         </TouchableOpacity>
       </View>
 
-      {/* Loading Indicator */}
-      {loading && (
+      {/* Loading Indicator - Only show if loading and no error */}
+      {loading && !error && url && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#2563EB" />
           <Text style={styles.loadingText}>Loading PDF...</Text>
@@ -595,8 +618,9 @@ export default function PDFViewer() {
               console.log("PDF viewer loading started");
             }}
             onLoadEnd={() => {
-              // Don't hide loading immediately - let the HTML script handle it
-              console.log("PDF viewer HTML loaded");
+              // HTML is loaded, but PDF might still be loading inside
+              // The HTML script will send 'pdfLoaded' message when ready
+              console.log("PDF viewer HTML loaded, waiting for PDF to render");
             }}
             onError={(syntheticEvent) => {
               const { nativeEvent } = syntheticEvent;
@@ -650,12 +674,15 @@ export default function PDFViewer() {
             allowsBackForwardNavigationGestures={false}
             onMessage={(event) => {
               const message = event.nativeEvent.data;
+              console.log('WebView message received:', message);
               if (message === 'openPDF') {
                 handleOpenInBrowser();
               } else if (message === 'pdfLoaded') {
+                console.log('PDF loaded successfully, hiding loader');
                 setLoading(false);
                 setError(null);
               } else if (message === 'pdfError') {
+                console.log('PDF error, hiding loader');
                 setLoading(false);
                 setError("Failed to load PDF. Please try opening in browser.");
               }

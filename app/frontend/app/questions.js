@@ -208,10 +208,10 @@ export default function PastQuestions() {
         </Text>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
-          <Text style={styles.errorText}>{error}</Text>
+          <Text style={styles.errorText}>{error?.message || error || "Failed to load questions"}</Text>
           <TouchableOpacity
             style={styles.retryButton}
-            onPress={fetchQuestions}
+            onPress={refresh}
           >
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
