@@ -54,7 +54,7 @@ export default function Login() {
                 console.error('Navigation error:', error);
                 // Fallback: try the full path
                 try {
-                  router.replace(needsProfileCompletion ? '/profile-completion' : '/( tabs )/index');
+                  router.replace(needsProfileCompletion ? '/profile-completion' : '/');
                 } catch (e) {
                   router.push(targetRoute);
                 }

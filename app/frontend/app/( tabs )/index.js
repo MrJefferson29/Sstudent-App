@@ -1,4 +1,4 @@
-import React, { useContext } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,11 +7,15 @@ import {
   ScrollView,
   Dimensions,
   TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { AuthContext } from "../Contexts/AuthContext";
-import { resolveAssetUrl } from "../utils/api";
+import { resolveAssetUrl, notificationsAPI } from "../utils/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Video } from "expo-av";
 
 const { width } = Dimensions.get('window');
 const SPACING = 20;
@@ -21,16 +25,83 @@ const CARD_WIDTH = (width - SPACING * 2 - (COLUMN_COUNT - 1) * 10) / COLUMN_COUN
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useContext(AuthContext);
+  const [notifications, setNotifications] = useState([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const profileImageUri =
     resolveAssetUrl(user?.profilePicture) ||
     `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || "User")}&background=1E3A8A&color=fff&size=128`;
+
+  const fetchNotifications = async (isRefreshing = false) => {
+    try {
+      if (!isRefreshing) {
+        setLoadingNotifications(true);
+      }
+
+      // Try cache first for instant load
+      try {
+        const cached = await AsyncStorage.getItem('notificationsData');
+        if (cached && !isRefreshing) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Array.isArray(parsed) && parsed.length >= 0) {
+            setNotifications(parsed);
+            setLoadingNotifications(false);
+          }
+        }
+      } catch (e) {
+        console.log('Error reading cached notifications:', e);
+      }
+
+      // Fetch from network
+      const response = await notificationsAPI.getAll(10);
+      if (response.success) {
+        const data = response.data || [];
+        setNotifications(data);
+        // Cache the data
+        try {
+          await AsyncStorage.setItem('notificationsData', JSON.stringify(data));
+        } catch (e) {
+          console.log('Error caching notifications:', e);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching notifications:', err);
+      // If network fails, try to use cached data
+      try {
+        const cached = await AsyncStorage.getItem('notificationsData');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Array.isArray(parsed) && parsed.length >= 0) {
+            setNotifications(parsed);
+          }
+        }
+      } catch (e) {
+        // Ignore cache read errors
+      }
+    } finally {
+      setLoadingNotifications(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchNotifications(true);
+  };
 
   return (
     <View style={professionalStyles.container}>
       <ScrollView 
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 40 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
 
         {/* Header */}
@@ -73,21 +144,23 @@ export default function HomeScreen() {
         <View style={professionalStyles.sectionContainer}>
           <Text style={professionalStyles.sectionTitle}>Notifications & Alerts</Text>
 
-          <NotificationItem 
-            icon="document-text-outline" 
-            title="Deadline: Scholarship Application" 
-            text="Submit before the end of this week." 
-            iconColor="#EF4444"
-          />
-
-          <NotificationItem 
-            icon="campaign" 
-            title="New Campus Contest" 
-            text="Vote for Mr. & Miss UBa now." 
-            iconColor="#3B82F6"
-            isMaterialIcon={true}
-          />
-
+          {loadingNotifications && notifications.length === 0 ? (
+            <View style={professionalStyles.loadingContainer}>
+              <ActivityIndicator size="small" color="#2563EB" />
+            </View>
+          ) : notifications.length === 0 ? (
+            <View style={professionalStyles.emptyNotifications}>
+              <Ionicons name="notifications-outline" size={32} color="#9CA3AF" />
+              <Text style={professionalStyles.emptyText}>No notifications yet</Text>
+            </View>
+          ) : (
+            notifications.map((notification) => (
+              <NotificationItem 
+                key={notification._id}
+                notification={notification}
+              />
+            ))
+          )}
         </View>
       </ScrollView>
     </View>
@@ -113,21 +186,58 @@ function ActionCard({ icon, label, route, color }) {
   );
 }
 
-function NotificationItem({ icon, title, text, iconColor, isMaterialIcon }) {
+function NotificationItem({ notification }) {
+  const router = useRouter();
+  const hasThumbnail = notification.thumbnail && notification.thumbnail.url;
+  const hasVideo = notification.video && notification.video.url;
+  const iconColor = "#2563EB";
+
+  const handlePress = () => {
+    router.push({
+      pathname: '/notification-detail',
+      params: {
+        notificationId: notification._id,
+      },
+    });
+  };
+
   return (
-    <View style={professionalStyles.notification}>
-      <View style={[professionalStyles.iconWrapper, { backgroundColor: `${iconColor}20` }]}>
-        {isMaterialIcon ? (
-          <MaterialIcons name={icon} size={20} color={iconColor} />
-        ) : (
-          <Ionicons name={icon} size={20} color={iconColor} />
-        )}
+    <TouchableOpacity 
+      style={professionalStyles.notification}
+      onPress={handlePress}
+      activeOpacity={0.8}
+    >
+      {hasThumbnail && (
+        <Image 
+          source={{ uri: resolveAssetUrl(notification.thumbnail.url) }} 
+          style={professionalStyles.notificationImage}
+        />
+      )}
+      {hasVideo && (
+        <View style={professionalStyles.notificationVideoContainer}>
+          <Video
+            source={{ uri: resolveAssetUrl(notification.video.url) }}
+            style={professionalStyles.notificationVideo}
+            useNativeControls={false}
+            resizeMode="cover"
+            shouldPlay={false}
+          />
+          <View style={professionalStyles.playButtonOverlay}>
+            <Ionicons name="play-circle" size={48} color="#fff" />
+          </View>
+        </View>
+      )}
+      <View style={professionalStyles.notificationContent}>
+        <View style={[professionalStyles.iconWrapper, { backgroundColor: `${iconColor}20` }]}>
+          <Ionicons name="notifications" size={20} color={iconColor} />
+        </View>
+        <View style={{ marginLeft: 12, flexShrink: 1, flex: 1 }}>
+          <Text style={professionalStyles.notificationTitle}>{notification.title}</Text>
+          <Text style={professionalStyles.notificationText} numberOfLines={2}>{notification.description}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
       </View>
-      <View style={{ marginLeft: 12, flexShrink: 1 }}>
-        <Text style={professionalStyles.notificationTitle}>{title}</Text>
-        <Text style={professionalStyles.notificationText}>{text}</Text>
-      </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -229,19 +339,48 @@ const professionalStyles = StyleSheet.create({
     marginTop: 3 
   },
   notification: { 
-    flexDirection: "row", 
-    alignItems: "center", 
     marginTop: 8, 
     backgroundColor: "#FFFFFF", 
-    padding: 14, 
     borderRadius: 12, 
     borderWidth: 1, 
-    borderColor: "#E2E8F0" ,
+    borderColor: "#E2E8F0",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
     shadowRadius: 3,
     elevation: 1,
+    overflow: 'hidden',
+  },
+  notificationImage: {
+    width: '100%',
+    height: 200,
+    resizeMode: 'cover',
+  },
+  notificationVideoContainer: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#000',
+    position: 'relative',
+  },
+  notificationVideo: {
+    width: '100%',
+    height: '100%',
+  },
+  playButtonOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  notificationContent: {
+    flexDirection: "row", 
+    alignItems: "flex-start", 
+    padding: 14,
+    justifyContent: 'space-between',
   },
   iconWrapper: {
     padding: 8,
@@ -251,10 +390,45 @@ const professionalStyles = StyleSheet.create({
   notificationTitle: { 
     fontSize: 15, 
     fontWeight: "600", 
-    color: "#1E293B" 
+    color: "#1E293B",
+    marginBottom: 4,
   },
   notificationText: { 
     fontSize: 13, 
-    color: "#6B7280" 
+    color: "#6B7280",
+    lineHeight: 18,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  adminButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#EEF2FF',
+  },
+  adminButtonText: {
+    marginLeft: 4,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2563EB',
+  },
+  loadingContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  emptyNotifications: {
+    paddingVertical: 30,
+    alignItems: 'center',
+  },
+  emptyText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#9CA3AF',
   },
 });

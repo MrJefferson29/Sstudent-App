@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, StatusBar, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const jobs = [
   {
@@ -34,6 +35,37 @@ const jobs = [
 ];
 
 export default function JobsScreen() {
+  const [cachedJobs, setCachedJobs] = useState(jobs);
+
+  useEffect(() => {
+    // Load from cache on mount
+    const loadCachedJobs = async () => {
+      try {
+        const cached = await AsyncStorage.getItem('jobsData');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+            setCachedJobs(parsed);
+          }
+        }
+      } catch (e) {
+        console.log('Error reading cached jobs:', e);
+      }
+    };
+
+    loadCachedJobs();
+
+    // Cache the static jobs data
+    const cacheJobs = async () => {
+      try {
+        await AsyncStorage.setItem('jobsData', JSON.stringify(jobs));
+      } catch (e) {
+        console.log('Error caching jobs:', e);
+      }
+    };
+    cacheJobs();
+  }, []);
+
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#3498DB" barStyle="light-content" />
@@ -42,7 +74,7 @@ export default function JobsScreen() {
         <Text style={styles.headerSubtitle}>Find your next career move</Text>
       </LinearGradient>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {jobs.map((item) => (
+        {cachedJobs.map((item) => (
           <TouchableOpacity
             key={item.id}
             style={styles.card}

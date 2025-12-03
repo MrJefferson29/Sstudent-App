@@ -132,6 +132,7 @@ const chatRoutes = require('./routes/chatRoutes');
 const liveSessionRoutes = require('./routes/liveSessionRoutes');
 const skillRoutes = require('./routes/skillRoutes');
 const libraryRoutes = require('./routes/libraryRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 app.use('/auth', authRoutes);
 app.use('/questions', questionRoutes);
@@ -152,6 +153,7 @@ app.use('/chat', chatRoutes);
 app.use('/live-sessions', liveSessionRoutes);
 app.use('/skills', skillRoutes);
 app.use('/library', libraryRoutes);
+app.use('/notifications', notificationRoutes);
 
 // Health check route
 app.get('/', (req, res) => {

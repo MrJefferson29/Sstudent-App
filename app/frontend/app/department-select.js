@@ -11,6 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { departmentsAPI } from "./utils/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function DepartmentSelect() {
   const { schoolId, schoolName } = useLocalSearchParams();
@@ -23,19 +24,62 @@ export default function DepartmentSelect() {
     fetchDepartments();
   }, [schoolId]);
 
-  const fetchDepartments = async () => {
+  const fetchDepartments = async (isRefreshing = false) => {
     try {
-      setIsLoading(true);
+      if (!isRefreshing) {
+        setIsLoading(true);
+      }
       setError(null);
+
+      // Try cache first for instant load
+      const cacheKey = `departments_${schoolId}`;
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached && !isRefreshing) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Array.isArray(parsed) && parsed.length >= 0) {
+            setDepartments(parsed);
+            setIsLoading(false);
+          }
+        }
+      } catch (e) {
+        console.log("Error reading cached departments:", e);
+      }
+
+      // Fetch from network
       const response = await departmentsAPI.getAll(schoolId);
       if (response.success) {
-        setDepartments(response.data || []);
+        const data = response.data || [];
+        setDepartments(data);
+        // Cache the data
+        try {
+          await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
+        } catch (e) {
+          console.log("Error caching departments:", e);
+        }
       } else {
         setError("Failed to load departments");
       }
     } catch (err) {
       console.error("Error fetching departments:", err);
-      setError("Failed to load departments. Please try again.");
+      // If network fails, try to use cached data
+      const cacheKey = `departments_${schoolId}`;
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Array.isArray(parsed) && parsed.length >= 0) {
+            setDepartments(parsed);
+            setError(null);
+          } else {
+            setError("Failed to load departments. Please check your connection.");
+          }
+        } else {
+          setError("Failed to load departments. Please try again.");
+        }
+      } catch (e) {
+        setError("Failed to load departments. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }

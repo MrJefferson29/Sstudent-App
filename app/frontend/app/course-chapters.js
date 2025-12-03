@@ -15,7 +15,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 // Assuming 'utils/api' contains courseChaptersAPI, courseCommentsAPI, resolveAssetUrl
 import { courseChaptersAPI, courseCommentsAPI, resolveAssetUrl } from "./utils/api";
-import YouTubeIframe from 'react-native-youtube-iframe'; 
+import YouTubeIframe from 'react-native-youtube-iframe';
+import AsyncStorage from "@react-native-async-storage/async-storage"; 
 
 export default function CourseChapters() {
   const { courseId, courseTitle } = useLocalSearchParams();
@@ -34,19 +35,62 @@ export default function CourseChapters() {
 
   // --- Fetching Logic ---
 
-  const fetchChapters = useCallback(async () => {
+  const fetchChapters = useCallback(async (isRefreshing = false) => {
     try {
-      setIsLoading(true);
+      if (!isRefreshing) {
+        setIsLoading(true);
+      }
       setError(null);
+      const cacheKey = `courseChapters_${courseId}`;
+
+      // Try cache first for instant load
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached && !isRefreshing) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Array.isArray(parsed) && parsed.length >= 0) {
+            setChapters(parsed);
+            setIsLoading(false);
+          }
+        }
+      } catch (e) {
+        console.log('Error reading cached chapters:', e);
+      }
+
+      // Fetch from network
       const response = await courseChaptersAPI.getByCourse(courseId);
       if (response.success) {
-        setChapters(response.data || []);
+        const data = response.data || [];
+        setChapters(data);
+        // Cache the data
+        try {
+          await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
+        } catch (e) {
+          console.log('Error caching chapters:', e);
+        }
       } else {
         setError("Failed to load chapters");
       }
     } catch (err) {
       console.error("Error fetching chapters:", err);
-      setError("Failed to load chapters. Please try again.");
+      // If network fails, try to use cached data
+      const cacheKey = `courseChapters_${courseId}`;
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Array.isArray(parsed) && parsed.length >= 0) {
+            setChapters(parsed);
+            setError(null);
+          } else {
+            setError("Failed to load chapters. Please check your connection.");
+          }
+        } else {
+          setError("Failed to load chapters. Please try again.");
+        }
+      } catch (e) {
+        setError("Failed to load chapters. Please try again.");
+      }
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -57,12 +101,49 @@ export default function CourseChapters() {
     if (!selectedChapter) return;
     try {
       setCommentsLoading(true);
+      const cacheKey = `courseComments_${selectedChapter._id}`;
+
+      // Try cache first for instant load
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Array.isArray(parsed)) {
+            setComments(parsed);
+            setCommentsLoading(false);
+          }
+        }
+      } catch (e) {
+        console.log('Error reading cached comments:', e);
+      }
+
+      // Fetch from network
       const response = await courseCommentsAPI.getByChapter(selectedChapter._id);
       if (response.success) {
-        setComments(response.data || []);
+        const data = response.data || [];
+        setComments(data);
+        // Cache the data
+        try {
+          await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
+        } catch (e) {
+          console.log('Error caching comments:', e);
+        }
       }
     } catch (err) {
       console.error("Error fetching comments:", err);
+      // If network fails, try to use cached data
+      const cacheKey = `courseComments_${selectedChapter._id}`;
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Array.isArray(parsed)) {
+            setComments(parsed);
+          }
+        }
+      } catch (e) {
+        // Ignore cache read errors
+      }
     } finally {
       setCommentsLoading(false);
     }
@@ -80,7 +161,7 @@ export default function CourseChapters() {
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchChapters();
+    fetchChapters(true);
   };
 
   // --- Video/Interaction Logic ---

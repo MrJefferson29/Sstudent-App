@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { schoolsAPI, concoursAPI } from "./utils/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function SchoolSelect() {
   const router = useRouter();
@@ -23,37 +24,122 @@ export default function SchoolSelect() {
   const [error, setError] = useState(null);
   const [selectedSchoolFilter, setSelectedSchoolFilter] = useState("all");
 
-  const fetchData = async (tab = activeTab) => {
+  const fetchData = async (tab = activeTab, isRefreshing = false) => {
     try {
-      setIsLoading(true);
+      if (!isRefreshing) {
+        setIsLoading(true);
+      }
       setError(null);
 
       if (tab === "school") {
+        // Try cache first for instant load
+        try {
+          const cached = await AsyncStorage.getItem("schoolsData");
+          if (cached && !isRefreshing) {
+            const parsed = JSON.parse(cached);
+            if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+              setSchools(parsed);
+              setIsLoading(false);
+            }
+          }
+        } catch (e) {
+          console.log("Error reading cached schools:", e);
+        }
+
+        // Fetch from network
         const response = await schoolsAPI.getAll();
         if (response.success) {
-          setSchools(response.data || []);
+          const data = response.data || [];
+          setSchools(data);
+          // Cache the data
+          try {
+            await AsyncStorage.setItem("schoolsData", JSON.stringify(data));
+          } catch (e) {
+            console.log("Error caching schools:", e);
+          }
         } else {
           setError("Failed to load schools");
         }
       } else {
+        // Try cache first for concours
+        try {
+          const cachedConcours = await AsyncStorage.getItem("concoursData");
+          const cachedSchools = await AsyncStorage.getItem("schoolsData");
+          
+          if (cachedConcours && !isRefreshing) {
+            const parsed = JSON.parse(cachedConcours);
+            if (parsed && Array.isArray(parsed) && parsed.length >= 0) {
+              setConcours(parsed);
+            }
+          }
+          
+          if (cachedSchools && !isRefreshing) {
+            const parsed = JSON.parse(cachedSchools);
+            if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+              setSchools(parsed);
+            }
+          }
+          
+          if ((cachedConcours || cachedSchools) && !isRefreshing) {
+            setIsLoading(false);
+          }
+        } catch (e) {
+          console.log("Error reading cached concours/schools:", e);
+        }
+
+        // Fetch from network
         const [concoursRes, schoolsRes] = await Promise.all([
           concoursAPI.getAll(),
           schools.length ? Promise.resolve({ success: true, data: schools }) : schoolsAPI.getAll(),
         ]);
 
         if (concoursRes.success) {
-          setConcours(concoursRes.data || []);
+          const data = concoursRes.data || [];
+          setConcours(data);
+          // Cache concours data
+          try {
+            await AsyncStorage.setItem("concoursData", JSON.stringify(data));
+          } catch (e) {
+            console.log("Error caching concours:", e);
+          }
         } else {
           setError("Failed to load concours");
         }
 
         if (schoolsRes.success) {
-          setSchools(schoolsRes.data || []);
+          const data = schoolsRes.data || [];
+          setSchools(data);
+          // Cache schools data
+          try {
+            await AsyncStorage.setItem("schoolsData", JSON.stringify(data));
+          } catch (e) {
+            console.log("Error caching schools:", e);
+          }
         }
       }
     } catch (err) {
       console.error("Error fetching data:", err);
-      setError("Failed to load data. Please try again later.");
+      // If network fails, try to use cached data
+      if (tab === "school") {
+        try {
+          const cached = await AsyncStorage.getItem("schoolsData");
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+              setSchools(parsed);
+              setError(null);
+            } else {
+              setError("Failed to load data. Please check your connection.");
+            }
+          } else {
+            setError("Failed to load data. Please try again later.");
+          }
+        } catch (e) {
+          setError("Failed to load data. Please try again later.");
+        }
+      } else {
+        setError("Failed to load data. Please try again later.");
+      }
     } finally {
       setIsLoading(false);
     }

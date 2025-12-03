@@ -17,6 +17,7 @@ import axios from 'axios';
 import { io } from 'socket.io-client';
 import { AuthContext } from '../Contexts/AuthContext';
 import { API_URL as BACKEND_API_URL, chatAPI } from '../utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const REMOTE_API_URL = 'https://ficedu-payment.onrender.com';
 const { width } = Dimensions.get('window');
@@ -41,10 +42,51 @@ const VideoDetails = () => {
   useEffect(() => {
     const fetchVideoDetails = async () => {
       try {
+        const cacheKey = `videoDetails_${id}`;
+
+        // Try cache first for instant load
+        try {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed) {
+              setVideoDetails(parsed);
+              setLoading(false);
+            }
+          }
+        } catch (e) {
+          console.log('Error reading cached video details:', e);
+        }
+
+        // Fetch from network
         const response = await axios.get(`${REMOTE_API_URL}/courses/video/${id}`);
-        setVideoDetails(response.data.data);
+        const data = response.data.data;
+        setVideoDetails(data);
+        
+        // Cache the data
+        try {
+          await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
+        } catch (e) {
+          console.log('Error caching video details:', e);
+        }
       } catch (error) {
-        Alert.alert('Error', 'Failed to load video details.');
+        // If network fails, try to use cached data
+        const cacheKey = `videoDetails_${id}`;
+        try {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed) {
+              setVideoDetails(parsed);
+            } else {
+              Alert.alert('Error', 'Failed to load video details.');
+            }
+          } else {
+            Alert.alert('Error', 'Failed to load video details.');
+          }
+        } catch (e) {
+          Alert.alert('Error', 'Failed to load video details.');
+        }
       } finally {
         setLoading(false);
       }
@@ -57,12 +99,50 @@ const VideoDetails = () => {
     const loadChat = async () => {
       try {
         setChatLoading(true);
+        const cacheKey = `videoChat_${id}`;
+
+        // Try cache first for instant load
+        try {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached && isMounted) {
+            const parsed = JSON.parse(cached);
+            if (parsed && Array.isArray(parsed)) {
+              setChatMessages(parsed);
+              setChatLoading(false);
+            }
+          }
+        } catch (e) {
+          console.log('Error reading cached chat:', e);
+        }
+
+        // Fetch from network
         const response = await chatAPI.getMessages('video', id);
         if (isMounted && response.success) {
-          setChatMessages(response.data || []);
+          const data = response.data || [];
+          setChatMessages(data);
+          
+          // Cache the messages
+          try {
+            await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
+          } catch (e) {
+            console.log('Error caching chat messages:', e);
+          }
         }
       } catch (error) {
         console.error('Failed to fetch video chat:', error);
+        // If network fails, try to use cached data
+        const cacheKey = `videoChat_${id}`;
+        try {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached && isMounted) {
+            const parsed = JSON.parse(cached);
+            if (parsed && Array.isArray(parsed)) {
+              setChatMessages(parsed);
+            }
+          }
+        } catch (e) {
+          // Ignore cache read errors
+        }
       } finally {
         if (isMounted) {
           setChatLoading(false);
@@ -88,9 +168,17 @@ const VideoDetails = () => {
     socketRef.current = socket;
     socket.emit('join_chat', { room: roomId });
 
-    const handleIncoming = (message) => {
+    const handleIncoming = async (message) => {
       if (message.resourceType === 'video' && message.resourceId === id) {
-        setChatMessages((prev) => [...prev, message]);
+        setChatMessages((prev) => {
+          const updated = [...prev, message];
+          // Cache updated messages
+          const cacheKey = `videoChat_${id}`;
+          AsyncStorage.setItem(cacheKey, JSON.stringify(updated)).catch(e => {
+            console.log('Error caching updated chat messages:', e);
+          });
+          return updated;
+        });
       }
     };
 

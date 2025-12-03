@@ -1,23 +1,24 @@
 import React, { useState, useEffect, useContext, useCallback } from "react";
 import { Linking, Alert } from 'react-native';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  Image,
-  ScrollView,
-  ActivityIndicator,
-  RefreshControl,
-  Dimensions,
-  StatusBar,
-  Platform,
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  Image,
+  ScrollView,
+  ActivityIndicator,
+  RefreshControl,
+  Dimensions,
+  StatusBar,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { AuthContext } from "./Contexts/AuthContext";
 import { scholarshipsAPI, resolveAssetUrl } from "./utils/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const { width } = Dimensions.get('window');
 const SPACING = 20;
@@ -116,23 +117,61 @@ export default function ScholarshipsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchScholarships = useCallback(async () => {
-    try {
-      if (backendScholarships.length === 0) setLoading(true);
-      const response = await scholarshipsAPI.getAll();
-      if (response.success) {
-        setBackendScholarships(response.data || []);
-      } else {
-        setBackendScholarships([]);
-      }
-    } catch (err) {
-      console.error("Error fetching scholarships:", err);
-      setBackendScholarships([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [backendScholarships.length]);
+  const fetchScholarships = useCallback(async (isRefreshing = false) => {
+    try {
+      if (backendScholarships.length === 0 && !isRefreshing) {
+        setLoading(true);
+      }
+
+      // Try cache first for instant load
+      try {
+        const cached = await AsyncStorage.getItem('scholarshipsData');
+        if (cached && !isRefreshing && backendScholarships.length === 0) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Array.isArray(parsed) && parsed.length >= 0) {
+            setBackendScholarships(parsed);
+            setLoading(false);
+          }
+        }
+      } catch (e) {
+        console.log('Error reading cached scholarships:', e);
+      }
+
+      // Fetch from network
+      const response = await scholarshipsAPI.getAll();
+      if (response.success) {
+        const data = response.data || [];
+        setBackendScholarships(data);
+        // Cache the data
+        try {
+          await AsyncStorage.setItem('scholarshipsData', JSON.stringify(data));
+        } catch (e) {
+          console.log('Error caching scholarships:', e);
+        }
+      } else {
+        setBackendScholarships([]);
+      }
+    } catch (err) {
+      console.error("Error fetching scholarships:", err);
+      // If network fails, try to use cached data
+      if (backendScholarships.length === 0) {
+        try {
+          const cached = await AsyncStorage.getItem('scholarshipsData');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && Array.isArray(parsed) && parsed.length >= 0) {
+              setBackendScholarships(parsed);
+            }
+          }
+        } catch (e) {
+          // Ignore cache read errors
+        }
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [backendScholarships.length]);
 
   useEffect(() => {
     fetchScholarships();
@@ -140,10 +179,10 @@ export default function ScholarshipsScreen() {
 
   const allScholarships = [...backendScholarships, ...dummyScholarships];
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchScholarships();
-  };
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchScholarships(true);
+  };
 
   const handleScholarshipPress = (scholarship) => {
     if (scholarship.websiteLink) {

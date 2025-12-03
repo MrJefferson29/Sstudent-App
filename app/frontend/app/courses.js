@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { coursesAPI, resolveAssetUrl } from "./utils/api";
 import { AuthContext } from "./Contexts/AuthContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function CoursesScreen() {
   const router = useRouter();
@@ -28,21 +29,66 @@ export default function CoursesScreen() {
     fetchCourses();
   }, []);
 
-  const fetchCourses = async () => {
+  const fetchCourses = async (isRefreshing = false) => {
     try {
-      setIsLoading(true);
+      if (!isRefreshing) {
+        setIsLoading(true);
+      }
       setError(null);
+      
       // Fetch courses for user's department if available, otherwise fetch all
       const departmentId = user?.department?._id || user?.department;
+      const cacheKey = `courses_${departmentId || 'all'}`;
+
+      // Try cache first for instant load
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached && !isRefreshing) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Array.isArray(parsed) && parsed.length >= 0) {
+            setCourses(parsed);
+            setIsLoading(false);
+          }
+        }
+      } catch (e) {
+        console.log('Error reading cached courses:', e);
+      }
+
+      // Fetch from network
       const response = await coursesAPI.getAll(departmentId, null);
       if (response.success) {
-        setCourses(response.data || []);
+        const data = response.data || [];
+        setCourses(data);
+        // Cache the data
+        try {
+          await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
+        } catch (e) {
+          console.log('Error caching courses:', e);
+        }
       } else {
         setError("Failed to load courses");
       }
     } catch (err) {
       console.error("Error fetching courses:", err);
-      setError("Failed to load courses. Please try again.");
+      // If network fails, try to use cached data
+      const departmentId = user?.department?._id || user?.department;
+      const cacheKey = `courses_${departmentId || 'all'}`;
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Array.isArray(parsed) && parsed.length >= 0) {
+            setCourses(parsed);
+            setError(null);
+          } else {
+            setError("Failed to load courses. Please check your connection.");
+          }
+        } else {
+          setError("Failed to load courses. Please try again.");
+        }
+      } catch (e) {
+        setError("Failed to load courses. Please try again.");
+      }
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -51,7 +97,7 @@ export default function CoursesScreen() {
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchCourses();
+    fetchCourses(true);
   };
 
   const handleCoursePress = (course) => {

@@ -395,5 +395,41 @@ export const libraryAPI = {
   },
 };
 
+// Notifications API
+export const notificationsAPI = {
+  getAll: async (limit = 50) => {
+    const response = await api.get(`/notifications?limit=${limit}`);
+    return response.data;
+  },
+
+  getById: async (notificationId) => {
+    const response = await api.get(`/notifications/${notificationId}`);
+    return response.data;
+  },
+
+  create: async (formData) => {
+    const response = await api.post('/notifications', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  update: async (notificationId, formData) => {
+    const response = await api.put(`/notifications/${notificationId}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  delete: async (notificationId) => {
+    const response = await api.delete(`/notifications/${notificationId}`);
+    return response.data;
+  },
+};
+
 export default api;
 

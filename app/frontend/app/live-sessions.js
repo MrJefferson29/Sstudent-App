@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { liveSessionsAPI } from './utils/api';
 import { AuthContext } from './Contexts/AuthContext';
 
@@ -37,15 +38,60 @@ const LiveSessionsScreen = () => {
   const fetchSessions = useCallback(async () => {
     try {
       setError(null);
+
+      // Try cache first for instant load
+      try {
+        const cached = await AsyncStorage.getItem('liveSessions_active');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            setSessions(parsed);
+            setLoading(false);
+          }
+        }
+      } catch (e) {
+        console.log('Error reading cached live sessions:', e);
+      }
+
+      // Fetch from network
       const response = await liveSessionsAPI.getAll({ active: 'true' });
       if (response.success) {
-        setSessions(response.data || []);
+        const data = response.data || [];
+        setSessions(data);
+        // Cache latest sessions
+        try {
+          await AsyncStorage.setItem('liveSessions_active', JSON.stringify(data));
+        } catch (e) {
+          console.log('Error caching live sessions:', e);
+        }
       } else {
         setError(response.message || 'Failed to load live sessions');
       }
     } catch (err) {
       console.error('Fetch live sessions error:', err);
-      setError(err.response?.data?.message || 'Failed to load live sessions');
+
+      // Handle unauthorized explicitly
+      if (err?.response?.status === 401) {
+        setError('You are not authorized to view live sessions. Please log in again.');
+      } else {
+        // On other errors, try to fall back to cached data
+        try {
+          const cached = await AsyncStorage.getItem('liveSessions_active');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setSessions(parsed);
+              setError(null);
+            } else {
+              setError(err.response?.data?.message || 'Failed to load live sessions');
+            }
+          } else {
+            setError(err.response?.data?.message || 'Failed to load live sessions');
+          }
+        } catch (e) {
+          setError(err.response?.data?.message || 'Failed to load live sessions');
+        }
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);

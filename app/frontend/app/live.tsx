@@ -20,6 +20,7 @@ import { liveSessionsAPI } from './utils/api';
 import { AuthContext } from './Contexts/AuthContext';
 import { API_URL as BACKEND_API_URL } from './utils/api';
 import api from './utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const CURRENT_USERNAME = 'You';
 
@@ -51,17 +52,61 @@ const LiveStreamScreen = () => {
       setLoading(false);
       return;
     }
-    const fetchSession = async () => {
+    const fetchSession = async (isRefreshing = false) => {
       try {
+        if (!isRefreshing) {
+          setLoading(true);
+        }
+
+        // Try cache first for instant load
+        const cacheKey = `liveSession_${sessionId}`;
+        try {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached && !isRefreshing) {
+            const parsed = JSON.parse(cached);
+            if (parsed) {
+              setSession(parsed);
+              setLoading(false);
+            }
+          }
+        } catch (e) {
+          console.log('Error reading cached live session:', e);
+        }
+
+        // Fetch from network
         const response = await liveSessionsAPI.getById(sessionId);
         if (response.success) {
-          setSession(response.data);
+          const data = response.data;
+          setSession(data);
+          // Cache the session data
+          try {
+            await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
+          } catch (e) {
+            console.log('Error caching live session:', e);
+          }
         } else {
           setError(response.message || 'Unable to load session');
         }
       } catch (err) {
         console.error('Fetch live session error:', err);
-        setError(err.response?.data?.message || 'Unable to load session');
+        // If network fails, try to use cached data
+        const cacheKey = `liveSession_${sessionId}`;
+        try {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed) {
+              setSession(parsed);
+              setError(null);
+            } else {
+              setError(err.response?.data?.message || 'Unable to load session');
+            }
+          } else {
+            setError(err.response?.data?.message || 'Unable to load session');
+          }
+        } catch (e) {
+          setError(err.response?.data?.message || 'Unable to load session');
+        }
       } finally {
         setLoading(false);
       }
@@ -74,10 +119,48 @@ const LiveStreamScreen = () => {
       if (!sessionId) return;
       try {
         setChatLoading(true);
+
+        // Try cache first for instant load
+        const cacheKey = `liveMessages_${sessionId}`;
+        try {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && Array.isArray(parsed)) {
+              setMessages(parsed);
+              setChatLoading(false);
+            }
+          }
+        } catch (e) {
+          console.log('Error reading cached messages:', e);
+        }
+
+        // Fetch from network
         const response = await api.get(`/live/${room}/messages`);
-        setMessages(response.data || []);
+        const data = response.data || [];
+        setMessages(data);
+        
+        // Cache the messages
+        try {
+          await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
+        } catch (e) {
+          console.log('Error caching messages:', e);
+        }
       } catch (err) {
         console.error('Fetch live chat error:', err);
+        // If network fails, try to use cached data
+        const cacheKey = `liveMessages_${sessionId}`;
+        try {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && Array.isArray(parsed)) {
+              setMessages(parsed);
+            }
+          }
+        } catch (e) {
+          // Ignore cache read errors
+        }
       } finally {
         setChatLoading(false);
       }
@@ -93,8 +176,16 @@ const LiveStreamScreen = () => {
     });
     socketRef.current = socket;
     socket.emit('join_live', { room });
-    socket.on('live_message', (message) => {
-      setMessages((prev) => [...prev, message]);
+    socket.on('live_message', async (message) => {
+      setMessages((prev) => {
+        const updated = [...prev, message];
+        // Cache updated messages
+        const cacheKey = `liveMessages_${sessionId}`;
+        AsyncStorage.setItem(cacheKey, JSON.stringify(updated)).catch(e => {
+          console.log('Error caching updated messages:', e);
+        });
+        return updated;
+      });
       requestAnimationFrame(() => {
         scrollRef.current?.scrollToEnd({ animated: true });
       });
