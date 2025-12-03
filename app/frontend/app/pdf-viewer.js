@@ -2,14 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { Sparkles, Loader2, Send } from 'lucide-react';
 
 // --- Firebase Configuration & Imports (Required for persistent storage, though not used in this demo) ---
-// Note: Since this is a simple stateless demo for API interaction, Firestore is initialized but not actively used.
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-
-// Global variables provided by the environment
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+// Note: Since
 
 // The main application component
 const App = () => {
