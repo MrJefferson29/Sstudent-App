@@ -200,62 +200,6 @@ export default function NotificationDetailScreen() {
           <Text style={styles.descriptionLabel}>Description</Text>
           <Text style={styles.description}>{notification.description}</Text>
         </View>
-
-        {/* Action Buttons - YouTube Style */}
-        <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="thumbs-up-outline" size={22} color="#606060" />
-            <Text style={styles.actionButtonText}>Like</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="thumbs-down-outline" size={22} color="#606060" />
-            <Text style={styles.actionButtonText}>Dislike</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="share-outline" size={22} color="#606060" />
-            <Text style={styles.actionButtonText}>Share</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="bookmark-outline" size={22} color="#606060" />
-            <Text style={styles.actionButtonText}>Save</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Divider */}
-        <View style={styles.divider} />
-
-        {/* Creator Info Section */}
-        <View style={styles.creatorSection}>
-          <View style={styles.creatorAvatar}>
-            <Ionicons name="notifications" size={24} color="#FF0000" />
-          </View>
-          <View style={styles.creatorInfo}>
-            <Text style={styles.creatorName}>System Notification</Text>
-            <Text style={styles.creatorSubtext}>
-              Official announcement from the platform
-            </Text>
-          </View>
-          <TouchableOpacity style={styles.subscribeButton}>
-            <Text style={styles.subscribeButtonText}>Subscribe</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Divider */}
-        <View style={styles.divider} />
-
-        {/* Comments Section Placeholder */}
-        <View style={styles.commentsSection}>
-          <View style={styles.commentsHeader}>
-            <Text style={styles.commentsTitle}>Comments</Text>
-            <Text style={styles.commentsCount}>0</Text>
-          </View>
-          <View style={styles.commentsPlaceholder}>
-            <Ionicons name="chatbubbles-outline" size={48} color="#9CA3AF" />
-            <Text style={styles.commentsPlaceholderText}>
-              No comments yet. Be the first to comment!
-            </Text>
-          </View>
-        </View>
       </ScrollView>
     </View>
   );

@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect } from "react";
+import React, { useContext, useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -9,8 +9,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Animated,
 } from "react-native";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from "expo-router";
 import { AuthContext } from "../Contexts/AuthContext";
 import { resolveAssetUrl, notificationsAPI } from "../utils/api";
@@ -28,6 +30,8 @@ export default function HomeScreen() {
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const animatedValue = useRef(new Animated.Value(width)).current;
+  const [textWidth, setTextWidth] = useState(0);
 
   const profileImageUri =
     resolveAssetUrl(user?.profilePicture) ||
@@ -89,23 +93,39 @@ export default function HomeScreen() {
     fetchNotifications();
   }, []);
 
+  useEffect(() => {
+    if (textWidth > 0) {
+      // Reset the animated value back to the starting position (width)
+      animatedValue.setValue(width);
+
+      Animated.loop(
+        Animated.timing(animatedValue, {
+          // Animate from starting position (width) to end position (-textWidth)
+          toValue: -textWidth,
+          duration: 15000,
+          useNativeDriver: true,
+        })
+      ).start();
+    }
+  }, [textWidth]);
+
   const onRefresh = () => {
     setRefreshing(true);
     fetchNotifications(true);
   };
 
   return (
-    <View style={professionalStyles.container}>
+    <View style={professionalStyles.mainWrapper}>
       <ScrollView 
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 40 }}
+        contentContainerStyle={professionalStyles.scrollViewContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
 
-        {/* Header */}
-        <View style={professionalStyles.header}>
+        {/* Header - Now has paddingHorizontal: SPACING */}
+        <View style={professionalStyles.headerPadded}>
           <View>
             <Text style={professionalStyles.welcome}>Welcome back,</Text>
             <Text style={professionalStyles.homeTitle}>{user?.name?.split(" ")[0] || "User"}</Text>
@@ -115,52 +135,86 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Quick Actions (merged with Student Elections & Courses Library) */}
-        <View style={professionalStyles.sectionContainer}>
-          <Text style={professionalStyles.sectionTitle}>Quick Actions</Text>
-          <View style={professionalStyles.featureGrid}>
-            <ActionCard icon="document-text-outline" label="Past Q&A" route="/school-select" />
-            <ActionCard icon="school-outline" label="Scholarships" route="/scholarship" />
-            <ActionCard icon="cart-outline" label="Market" route="market" />
-            <ActionCard icon="construct-outline" label="Skills" route="/skill-courses" />
-            <ActionCard icon="radio-outline" label="Live Sessions" route="/live-sessions" />
-            <ActionCard icon="briefcase-outline" label="Internships" route="/internships" />
-            <ActionCard icon="business-outline" label="Jobs" route="/jobs" />
-            <ActionCard icon="people-outline" label="Student Elections" route="/voting" color="#2563EB" />
-            <ActionCard icon="library-outline" label="Study Courses Library" route="/courses" color="#1E293B" />
+        {/* Updated Full-Width Marquee Strip
+            * fullWidthStrip uses marginHorizontal: -SPACING to break out of the content flow.
+            * This works because it is now a direct child of the ScrollView/Container content.
+        */}
+        <LinearGradient
+          colors={['#9925ebff', '#1E40AF']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={professionalStyles.fullWidthStrip}
+        >
+          <Animated.Text
+            style={{
+              fontSize: 16,
+              fontWeight: 'bold',
+              color: 'white',
+              textTransform: 'uppercase',
+              transform: [{ translateX: animatedValue }],
+              lineHeight: 40,
+              alignSelf: 'center',
+            }}
+            onLayout={(event) => setTextWidth(event.nativeEvent.layout.width)}
+          >
+            Don't forget to vote for the school council elections.
+            Don't forget to vote for the school council elections.
+            Don't forget to vote for the school council elections.
+          </Animated.Text>
+          <View style={professionalStyles.alertBadge}>
+            <Text style={professionalStyles.alertText}>ALERT!</Text>
           </View>
-        </View>
+        </LinearGradient>
 
-        {/* Create CV */}
-        <TouchableOpacity onPress={() => router.push("/cv")} style={professionalStyles.cvCard} activeOpacity={0.9}>
-          <Ionicons name="document-attach-outline" size={32} color="#fff" style={{ marginRight: 12 }} />
-          <View>
-            <Text style={professionalStyles.cvTitle}>Build Your Professional CV</Text>
-            <Text style={professionalStyles.cvSubtitle}>Build a high-impact CV in minutes.</Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* Notifications */}
-        <View style={professionalStyles.sectionContainer}>
-          <Text style={professionalStyles.sectionTitle}>Notifications & Alerts</Text>
-
-          {loadingNotifications && notifications.length === 0 ? (
-            <View style={professionalStyles.loadingContainer}>
-              <ActivityIndicator size="small" color="#2563EB" />
+        {/* Padded Content Wrapper for all subsequent sections */}
+        <View style={professionalStyles.contentPadded}>
+            {/* Quick Actions (merged with Student Elections & Courses Library) */}
+            <View style={professionalStyles.sectionContainer}>
+                <Text style={professionalStyles.sectionTitle}>Quick Actions</Text>
+                <View style={professionalStyles.featureGrid}>
+                    <ActionCard icon="document-text-outline" label="Past Q&A" route="/school-select" />
+                    <ActionCard icon="school-outline" label="Scholarships" route="/scholarship" />
+                    <ActionCard icon="cart-outline" label="Market" route="market" />
+                    <ActionCard icon="construct-outline" label="Skills" route="/skill-courses" />
+                    <ActionCard icon="radio-outline" label="Live Sessions" route="/live-sessions" />
+                    <ActionCard icon="briefcase-outline" label="Internships" route="/internships" />
+                    <ActionCard icon="business-outline" label="Jobs" route="/jobs" />
+                    <ActionCard icon="people-outline" label="Student Elections" route="/voting" color="#2563EB" />
+                    <ActionCard icon="library-outline" label="Study Courses Library" route="/courses" color="#1E293B" />
+                </View>
             </View>
-          ) : notifications.length === 0 ? (
-            <View style={professionalStyles.emptyNotifications}>
-              <Ionicons name="notifications-outline" size={32} color="#9CA3AF" />
-              <Text style={professionalStyles.emptyText}>No notifications yet</Text>
+
+            {/* Create CV */}
+            <TouchableOpacity onPress={() => router.push("/cv")} style={professionalStyles.cvCard} activeOpacity={0.9}>
+                <Ionicons name="document-attach-outline" size={32} color="#fff" style={{ marginRight: 12 }} />
+                <View>
+                    <Text style={professionalStyles.cvTitle}>Build Your Professional CV</Text>
+                    <Text style={professionalStyles.cvSubtitle}>Build a high-impact CV in minutes.</Text>
+                </View>
+            </TouchableOpacity>
+
+            {/* Notifications */}
+            <View style={professionalStyles.sectionContainer}>
+                <Text style={professionalStyles.sectionTitle}>Notifications & Alerts</Text>
+
+                {loadingNotifications && notifications.length === 0 ? (
+                    <View style={professionalStyles.loadingContainer}>
+                        <ActivityIndicator size="small" color="#2563EB" />
+                    </View>
+                ) : notifications.length === 0 ? (
+                    <View style={professionalStyles.emptyNotifications}>
+                        <Ionicons name="notifications-outline" size={32} color="#9CA3AF" />
+                        <Text style={professionalStyles.emptyText}>No notifications yet</Text>
+                    </View>
+                ) : (
+                    notifications.map((notification) => (
+                        <NotificationItem 
+                            key={notification._id}
+                            notification={notification}
+                        />
+                    ))
+                )}
             </View>
-          ) : (
-            notifications.map((notification) => (
-              <NotificationItem 
-                key={notification._id}
-                notification={notification}
-              />
-            ))
-          )}
         </View>
       </ScrollView>
     </View>
@@ -207,26 +261,6 @@ function NotificationItem({ notification }) {
       onPress={handlePress}
       activeOpacity={0.8}
     >
-      {hasThumbnail && (
-        <Image 
-          source={{ uri: resolveAssetUrl(notification.thumbnail.url) }} 
-          style={professionalStyles.notificationImage}
-        />
-      )}
-      {hasVideo && (
-        <View style={professionalStyles.notificationVideoContainer}>
-          <Video
-            source={{ uri: resolveAssetUrl(notification.video.url) }}
-            style={professionalStyles.notificationVideo}
-            useNativeControls={false}
-            resizeMode="cover"
-            shouldPlay={false}
-          />
-          <View style={professionalStyles.playButtonOverlay}>
-            <Ionicons name="play-circle" size={48} color="#fff" />
-          </View>
-        </View>
-      )}
       <View style={professionalStyles.notificationContent}>
         <View style={[professionalStyles.iconWrapper, { backgroundColor: `${iconColor}20` }]}>
           <Ionicons name="notifications" size={20} color={iconColor} />
@@ -246,20 +280,37 @@ function NotificationItem({ notification }) {
 // ==========================================================
 
 const professionalStyles = StyleSheet.create({
-  container: { 
+  mainWrapper: { 
     flex: 1, 
     backgroundColor: "#F8FAFC", 
-    paddingTop: 50, 
-    paddingHorizontal: SPACING
+  },
+  scrollViewContent: {
+      paddingBottom: 40,
+      paddingTop: 50, // Applied here to move content down from the status bar
+  },
+  contentPadded: {
+    // This wrapper applies padding to all content below the Marquee strip
+    paddingHorizontal: SPACING,
   },
   sectionContainer: {
     marginTop: 25,
   },
-  header: { 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    alignItems: "center", 
-    marginBottom: 20 
+  headerPadded: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+    // Header gets the padding to align content with the rest of the page
+    paddingHorizontal: SPACING,
+    paddingVertical: 15,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    marginHorizontal: SPACING,
   },
   homeTitle: { 
     fontSize: 17, 
@@ -276,7 +327,39 @@ const professionalStyles = StyleSheet.create({
     height: 50, 
     borderRadius: 25, 
     borderWidth: 3, 
-    borderColor: "#2563EB"
+    borderColor: "#255cd4ff"
+  },
+  fullWidthStrip: {
+    height: 40,
+    overflow: 'hidden',
+    // This negative margin cancels out the SPACING applied by the surrounding padded element (ScrollView content)
+    // NOTE: In this fixed layout, we rely on the parent (ScrollView) having no paddingHorizontal, but the Header/Content do.
+    // Since the scrollview content is the only parent, we cancel out the contentPadded padding, by relying on the fact that
+    // the ScrollView itself is full width.
+    marginHorizontal: -SPACING,
+    // To ensure it breaks out of the ScrollView if contentPadded were applied to the whole ScrollView,
+    // we apply padding to the Header and a new wrapper (contentPadded) for everything below the strip.
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 25, // Add space below the strip
+  },
+  alertBadge: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 80,
+    backgroundColor: '#7324ceff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+    paddingHorizontal: 5,
+  },
+  alertText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginLeft: 10,
   },
   featureGrid: { 
     flexDirection: "row", 

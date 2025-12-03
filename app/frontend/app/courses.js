@@ -20,73 +20,72 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 export default function CoursesScreen() {
   const router = useRouter();
   const { user } = useContext(AuthContext);
+
   const [courses, setCourses] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  const [selectedLevel, setSelectedLevel] = useState(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
   useEffect(() => {
     fetchCourses();
   }, []);
 
+  useEffect(() => {
+    fetchCourses();
+  }, [selectedLevel]);
+
   const fetchCourses = async (isRefreshing = false) => {
     try {
-      if (!isRefreshing) {
-        setIsLoading(true);
-      }
+      if (!isRefreshing) setIsLoading(true);
       setError(null);
-      
-      // Fetch courses for user's department if available, otherwise fetch all
-      const departmentId = user?.department?._id || user?.department;
-      const cacheKey = `courses_${departmentId || 'all'}`;
 
-      // Try cache first for instant load
+      const departmentId = user?.department?._id || user?.department;
+      const cacheKey = `courses_${departmentId || "all"}`;
+
       try {
         const cached = await AsyncStorage.getItem(cacheKey);
         if (cached && !isRefreshing) {
           const parsed = JSON.parse(cached);
-          if (parsed && Array.isArray(parsed) && parsed.length >= 0) {
+          if (Array.isArray(parsed)) {
             setCourses(parsed);
             setIsLoading(false);
           }
         }
       } catch (e) {
-        console.log('Error reading cached courses:', e);
+        console.log("Cache read error:", e);
       }
 
-      // Fetch from network
-      const response = await coursesAPI.getAll(departmentId, null);
+      const response = await coursesAPI.getAll(departmentId, selectedLevel);
       if (response.success) {
         const data = response.data || [];
         setCourses(data);
-        // Cache the data
+
         try {
           await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
         } catch (e) {
-          console.log('Error caching courses:', e);
+          console.log("Cache save error:", e);
         }
       } else {
         setError("Failed to load courses");
       }
     } catch (err) {
       console.error("Error fetching courses:", err);
-      // If network fails, try to use cached data
+
       const departmentId = user?.department?._id || user?.department;
-      const cacheKey = `courses_${departmentId || 'all'}`;
+      const cacheKey = `courses_${departmentId || "all"}`;
+
       try {
         const cached = await AsyncStorage.getItem(cacheKey);
         if (cached) {
-          const parsed = JSON.parse(cached);
-          if (parsed && Array.isArray(parsed) && parsed.length >= 0) {
-            setCourses(parsed);
-            setError(null);
-          } else {
-            setError("Failed to load courses. Please check your connection.");
-          }
+          setCourses(JSON.parse(cached));
+          setError(null);
         } else {
           setError("Failed to load courses. Please try again.");
         }
-      } catch (e) {
+      } catch {
         setError("Failed to load courses. Please try again.");
       }
     } finally {
@@ -144,6 +143,8 @@ export default function CoursesScreen() {
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
+
+      {/* =============== HEADER =============== */}
       <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>Courses</Text>
         <TouchableOpacity style={styles.searchButton}>
@@ -151,6 +152,44 @@ export default function CoursesScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* =============== DROPDOWN FILTER =============== */}
+      <View style={styles.dropdownWrapper}>
+        <TouchableOpacity
+          style={styles.dropdownButton}
+          onPress={() => setDropdownOpen(!dropdownOpen)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.dropdownButtonText}>
+            {selectedLevel ? `${selectedLevel} Level` : "All Levels"}
+          </Text>
+          <Ionicons
+            name={dropdownOpen ? "chevron-up" : "chevron-down"}
+            size={20}
+            color="#4B5563"
+          />
+        </TouchableOpacity>
+
+        {dropdownOpen && (
+          <View style={styles.dropdownMenu}>
+            {["All", "100", "200", "300", "400", "500"].map((lvl) => (
+              <TouchableOpacity
+                key={lvl}
+                onPress={() => {
+                  setSelectedLevel(lvl === "All" ? null : lvl);
+                  setDropdownOpen(false);
+                }}
+                style={styles.dropdownItem}
+              >
+                <Text style={styles.dropdownItemText}>
+                  {lvl === "All" ? "All Levels" : `${lvl} Level`}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
+
+      {/* =============== EMPTY STATE =============== */}
       {courses.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="book-outline" size={64} color="#9CA3AF" />
@@ -158,7 +197,7 @@ export default function CoursesScreen() {
           <Text style={styles.emptySubtext}>
             {user?.department
               ? "Courses for your department will appear here"
-              : "Courses will appear here once they are added"}
+              : "Courses will appear here once added"}
           </Text>
         </View>
       ) : (
@@ -186,25 +225,34 @@ export default function CoursesScreen() {
                   <Ionicons name="book-outline" size={32} color="#9CA3AF" />
                 </View>
               )}
+
               <View style={styles.courseInfo}>
                 <Text style={styles.courseTitle} numberOfLines={2}>
                   {course.title}
                 </Text>
+
                 {course.code && (
                   <Text style={styles.courseCode}>{course.code}</Text>
                 )}
+
                 {course.instructor && (
                   <Text style={styles.instructor}>
-                    <Ionicons name="person-outline" size={14} color="#6B7280" />{" "}
+                    <Ionicons
+                      name="person-outline"
+                      size={14}
+                      color="#6B7280"
+                    />{" "}
                     {course.instructor}
                   </Text>
                 )}
+
                 {course.description && (
                   <Text style={styles.description} numberOfLines={2}>
                     {course.description}
                   </Text>
                 )}
               </View>
+
               <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
             </TouchableOpacity>
           ))}
@@ -215,10 +263,8 @@ export default function CoursesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F9FAFB",
-  },
+  container: { flex: 1, backgroundColor: "#F9FAFB" },
+
   headerContainer: {
     paddingHorizontal: 20,
     paddingTop: Platform.OS === "android" ? 15 : 50,
@@ -230,18 +276,69 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
   },
+
   headerTitle: {
     fontSize: 24,
     fontWeight: "700",
     color: "#374151",
   },
-  searchButton: {
-    padding: 5,
+
+  searchButton: { padding: 5 },
+
+  /* ================= DROPDOWN ================= */
+
+  dropdownWrapper: {
+    paddingHorizontal: 20,
+    marginTop: 10,
+    zIndex: 10,
   },
-  scrollContainer: {
-    padding: 20,
-    paddingBottom: 30,
+
+  dropdownButton: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
   },
+
+  dropdownButtonText: {
+    fontSize: 14,
+    color: "#4B5563",
+    fontWeight: "600",
+  },
+
+  dropdownMenu: {
+    marginTop: 6,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+
+  dropdownItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+
+  dropdownItemText: {
+    fontSize: 14,
+    color: "#4B5563",
+  },
+
+  /* ================= OTHER STYLES ================= */
+
+  scrollContainer: { padding: 20, paddingBottom: 30 },
+
   courseCard: {
     backgroundColor: "#fff",
     borderRadius: 12,
@@ -255,6 +352,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+
   thumbnail: {
     width: 80,
     height: 80,
@@ -262,45 +360,33 @@ const styles = StyleSheet.create({
     marginRight: 15,
     backgroundColor: "#E5E7EB",
   },
-  thumbnailPlaceholder: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  courseInfo: {
-    flex: 1,
-  },
+
+  thumbnailPlaceholder: { justifyContent: "center", alignItems: "center" },
+
+  courseInfo: { flex: 1 },
+
   courseTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: "#111827",
     marginBottom: 4,
   },
-  courseCode: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginBottom: 4,
-  },
-  instructor: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginBottom: 4,
-  },
-  description: {
-    fontSize: 12,
-    color: "#9CA3AF",
-    marginTop: 4,
-  },
+
+  courseCode: { fontSize: 12, color: "#6B7280", marginBottom: 4 },
+
+  instructor: { fontSize: 12, color: "#6B7280", marginBottom: 4 },
+
+  description: { fontSize: 12, color: "#9CA3AF", marginTop: 4 },
+
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingTop: 100,
   },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: "#6B7280",
-  },
+
+  loadingText: { marginTop: 12, fontSize: 16, color: "#6B7280" },
+
   errorContainer: {
     flex: 1,
     justifyContent: "center",
@@ -308,6 +394,7 @@ const styles = StyleSheet.create({
     paddingTop: 100,
     paddingHorizontal: 20,
   },
+
   errorText: {
     marginTop: 16,
     fontSize: 16,
@@ -315,17 +402,16 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 20,
   },
+
   retryButton: {
     backgroundColor: "#2563EB",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
   },
-  retryButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
+
+  retryButtonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+
   emptyContainer: {
     flex: 1,
     justifyContent: "center",
@@ -333,6 +419,7 @@ const styles = StyleSheet.create({
     paddingTop: 100,
     paddingHorizontal: 20,
   },
+
   emptyText: {
     marginTop: 16,
     fontSize: 18,
@@ -340,6 +427,7 @@ const styles = StyleSheet.create({
     color: "#374151",
     textAlign: "center",
   },
+
   emptySubtext: {
     marginTop: 8,
     fontSize: 14,
