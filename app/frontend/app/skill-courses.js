@@ -18,6 +18,7 @@ import { DrawerLayoutAndroid } from "react-native-gesture-handler";
 import { Ionicons } from "@expo/vector-icons";
 import { AuthContext } from "./Contexts/AuthContext";
 import { resolveAssetUrl } from "./utils/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const Skills = () => {
   const { userToken, userEmail } = useContext(AuthContext);
@@ -29,17 +30,51 @@ const Skills = () => {
   const router = useRouter();
 
   useEffect(() => {
-    fetchSkills();
+    let isMounted = true;
+
+    const init = async () => {
+      try {
+        // Try cache first for instant load
+        const cached = await AsyncStorage.getItem("skillCourses");
+        if (cached && isMounted) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setSkills(parsed);
+            setLoading(false);
+          }
+        }
+      } catch (e) {
+        console.log("Error reading cached skill courses:", e);
+      } finally {
+        // Always attempt a background refresh
+        fetchSkills(false, isMounted);
+      }
+    };
+
+    init();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Fetch skills from the backend
-  const fetchSkills = async () => {
+  const fetchSkills = async (isRefreshing = false, isMountedFlag = true) => {
     try {
-      setLoading(true);
+      if (!isRefreshing) {
+        setLoading(true);
+      }
       setError(null);
       const response = await axios.post("https://ficedu-payment.onrender.com/courses/get-all");
       const data = response.data?.data || [];
+      if (!isMountedFlag) return;
+
       setSkills(data);
+      try {
+        await AsyncStorage.setItem("skillCourses", JSON.stringify(data));
+      } catch (e) {
+        console.log("Error caching skill courses:", e);
+      }
       if (!Array.isArray(data) || data.length === 0) {
         console.log("No skills/courses returned from remote service");
       }
@@ -47,14 +82,16 @@ const Skills = () => {
       console.error("Error fetching skills:", err);
       setError("Failed to load skills. Please try again.");
     } finally {
-      setLoading(false);
+      if (!isRefreshing) {
+        setLoading(false);
+      }
     }
   };
 
   // Pull-to-refresh handler
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchSkills();
+    await fetchSkills(true, true);
     setRefreshing(false);
   };
 
