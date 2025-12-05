@@ -39,42 +39,37 @@ export default function PastQuestions() {
         },
         signal
       );
-      if (!result.success) {
-        throw new Error(result.message || "Failed to load questions");
-      }
+      if (!result.success) throw new Error(result.message || "Failed to load questions");
       return result;
     },
     [departmentId, level, subject],
     {
-      cacheDuration: 10 * 60 * 1000, // 10 minutes cache
-      refetchOnMount: true, // Fetch in background to update cache
+      cacheDuration: 10 * 60 * 1000,
+      refetchOnMount: true,
     }
   );
 
-  // Memoize expensive grouping operation
+  const questionsData = response?.data || [];
+
+  // Memoize grouped questions by year
   const groupedQuestions = useMemo(() => {
-    if (!response?.data) return {};
-
-    const questionsData = response.data || [];
+    if (!questionsData.length) return {};
     const grouped = {};
-
     questionsData.forEach((question) => {
       const year = question.year;
-      if (!grouped[year]) {
-        grouped[year] = [];
-      }
+      if (!grouped[year]) grouped[year] = [];
       grouped[year].push(question);
     });
 
-    // Sort years in descending order
-    const sortedYears = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
-    const sortedGrouped = {};
-    sortedYears.forEach((year) => {
-      sortedGrouped[year] = grouped[year];
-    });
+    const sortedYears = Object.keys(grouped)
+      .map(Number)
+      .sort((a, b) => b - a)
+      .map(String);
 
+    const sortedGrouped = {};
+    sortedYears.forEach((year) => (sortedGrouped[year] = grouped[year]));
     return sortedGrouped;
-  }, [response?.data]);
+  }, [questionsData]);
 
   const extractYouTubeId = (url) => {
     if (!url) return null;
@@ -86,33 +81,21 @@ export default function PastQuestions() {
     if (state === "ended") setPlaying(false);
   }, []);
 
-  // Open PDF in the app's PDF viewer
   const openPDF = (questionObj) => {
-    try {
-      const fullUrl = resolveAssetUrl(questionObj.pdfUrl) || questionObj.pdfUrl;
-
-      console.log("Opening PDF URL:", fullUrl);
-
-      if (!fullUrl) {
-        Alert.alert("Error", "PDF URL is not available");
-        return;
-      }
-
-      router.push({
-        pathname: "/pdf-viewer",
-        params: {
-          pdfUrl: fullUrl,
-          title: `${subject} - Past Question`,
-          questionId: questionObj._id,
-        },
-      });
-    } catch (error) {
-      console.error("Failed to open PDF:", error);
-      Alert.alert(
-        "PDF Access Error",
-        "Unable to open the PDF. Please try again or contact support if the issue persists."
-      );
+    const fullUrl = resolveAssetUrl(questionObj.pdfUrl) || questionObj.pdfUrl;
+    if (!fullUrl) {
+      Alert.alert("Error", "PDF URL is not available");
+      return;
     }
+
+    router.push({
+      pathname: "/pdf-viewer",
+      params: {
+        pdfUrl: fullUrl,
+        title: `${subject} - Past Question`,
+        questionId: questionObj._id,
+      },
+    });
   };
 
   const openSolutionPdf = (solution, question) => {
@@ -121,8 +104,6 @@ export default function PastQuestions() {
       Alert.alert("PDF Solution Error", "This solution does not include a PDF file.");
       return;
     }
-
-    console.log("Opening PDF solution:", pdfUrl);
 
     router.push({
       pathname: "/pdf-viewer",
@@ -134,61 +115,43 @@ export default function PastQuestions() {
     });
   };
 
-  // Handle viewing solution
   const handleViewSolution = async (question) => {
     try {
-      const response = await questionsAPI.getById(question._id);
-
-      if (response.success && response.data.solutions && response.data.solutions.length > 0) {
-        const solutions = response.data.solutions;
-
+      const res = await questionsAPI.getById(question._id);
+      if (res.success && res.data.solutions?.length) {
+        const solutions = res.data.solutions;
         if (solutions.length === 1) {
-          const solution = solutions[0];
-          openSolution(solution, question);
+          openSolution(solutions[0], question);
         } else {
-          const solutionOptions = solutions.map((sol, index) => ({
-            text: `Solution ${index + 1}${sol.youtubeUrl ? " (Video)" : ""}${sol.pdfUrl ? " (PDF)" : ""}`,
+          const options = solutions.map((sol, idx) => ({
+            text: `Solution ${idx + 1}${sol.youtubeUrl ? " (Video)" : ""}${sol.pdfUrl ? " (PDF)" : ""}`,
             onPress: () => openSolution(sol, question),
           }));
-
-          solutionOptions.push({ text: "Cancel", style: "cancel" });
-
-          Alert.alert(
-            "Select Solution",
-            `Choose a solution for ${subject} ${question.year}:`,
-            solutionOptions
-          );
+          options.push({ text: "Cancel", style: "cancel" });
+          Alert.alert("Select Solution", `Choose a solution for ${subject} ${question.year}:`, options);
         }
       } else {
         Alert.alert("No Solutions", "No solutions available for this question yet.");
       }
-    } catch (error) {
-      console.error("Error fetching solutions:", error);
+    } catch (err) {
+      console.error(err);
       Alert.alert("Error", "Failed to load solutions. Please try again.");
     }
   };
 
-  // Open solution (YouTube or PDF) using inline YouTube iframe
   const openSolution = (solution, question) => {
     const videoId = extractYouTubeId(solution.youtubeUrl);
-
     if (solution.youtubeUrl && videoId) {
-      setCurrentSolution({
-        ...solution,
-        videoId,
-        pdfUrl: resolveAssetUrl(solution.pdfUrl) || null,
-      });
+      setCurrentSolution({ ...solution, videoId, pdfUrl: resolveAssetUrl(solution.pdfUrl) || null });
       setCurrentQuestion(question);
       setShowVideo(true);
       setPlaying(true);
       return;
     }
-
     if (solution.pdfUrl) {
       openSolutionPdf(solution, question);
       return;
     }
-
     Alert.alert("Error", "This solution does not contain a playable video or PDF.");
   };
 
@@ -197,21 +160,19 @@ export default function PastQuestions() {
       Alert.alert("Empty Field", "Please type your question or comment.");
       return;
     }
-
     setUploadingQuestion(true);
     try {
-      // Simulate network call – backend endpoint not yet wired
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      await new Promise((resolve) => setTimeout(resolve, 1200)); // Simulate
       Alert.alert("Thank you!", "Your question/comment has been submitted.");
       setQuestionText("");
-    } catch (err) {
+    } catch {
       Alert.alert("Error", "Unable to submit your question. Please try again.");
     } finally {
       setUploadingQuestion(false);
     }
   };
 
-  // Inline video view when a YouTube solution is open
+  // Show YouTube solution
   if (showVideo && currentSolution && currentQuestion) {
     return (
       <View style={styles.container}>
@@ -233,7 +194,7 @@ export default function PastQuestions() {
         <View style={styles.videoWrapper}>
           <YouTubeIframe
             videoId={currentSolution.videoId}
-            height={Platform.OS === "android" ? 250 : 250}
+            height={250}
             play={playing}
             onChangeState={onStateChange}
           />
@@ -242,12 +203,8 @@ export default function PastQuestions() {
         <View style={styles.solutionInfo}>
           <Text style={styles.cardTitle}>{subject}</Text>
           <Text style={styles.solutionMeta}>Year {currentQuestion.year}</Text>
-
           {currentSolution.pdfUrl ? (
-            <TouchableOpacity
-              style={styles.solutionPdfButton}
-              onPress={() => openSolutionPdf(currentSolution, currentQuestion)}
-            >
+            <TouchableOpacity style={styles.solutionPdfButton} onPress={() => openSolutionPdf(currentSolution, currentQuestion)}>
               <Ionicons name="document-text-outline" size={16} color="#fff" />
               <Text style={styles.solutionPdfButtonText}>Open Solution PDF</Text>
             </TouchableOpacity>
@@ -283,11 +240,7 @@ export default function PastQuestions() {
                 onPress={handleSubmitQuestion}
                 disabled={!questionText.trim() || uploadingQuestion}
               >
-                {uploadingQuestion ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Ionicons name="send" size={18} color="#fff" />
-                )}
+                {uploadingQuestion ? <ActivityIndicator color="#fff" /> : <Ionicons name="send" size={18} color="#fff" />}
               </TouchableOpacity>
             </View>
           </View>
@@ -296,16 +249,12 @@ export default function PastQuestions() {
     );
   }
 
-  // Render loading state
-  if (isLoading && !refreshing) {
+  // Full-page loading
+  if (isLoading && !questionsData.length) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Past Questions</Text>
-        </View>
-        <Text style={styles.subtitle}>
-          {subject} - {level}, {departmentName || "Department"}
-        </Text>
+        <View style={styles.header}><Text style={styles.title}>Past Questions</Text></View>
+        <Text style={styles.subtitle}>{subject} - {level}, {departmentName || "Department"}</Text>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#2563EB" />
           <Text style={styles.loadingText}>Loading questions...</Text>
@@ -314,23 +263,16 @@ export default function PastQuestions() {
     );
   }
 
-  // Render error state
-  if (error && refreshing) {
+  // Full-page error (no cached data)
+  if (error && !questionsData.length) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Past Questions</Text>
-        </View>
-        <Text style={styles.subtitle}>
-          {subject} - {level}, {departmentName || "Department"}
-        </Text>
+        <View style={styles.header}><Text style={styles.title}>Past Questions</Text></View>
+        <Text style={styles.subtitle}>{subject} - {level}, {departmentName || "Department"}</Text>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
           <Text style={styles.errorText}>{error?.message || error || "Failed to load questions"}</Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={refresh}
-          >
+          <TouchableOpacity style={styles.retryButton} onPress={refresh}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
@@ -338,16 +280,12 @@ export default function PastQuestions() {
     );
   }
 
-  // Render empty state
-  if (Object.keys(groupedQuestions).length === 0 && !isLoading) {
+  // Empty state
+  if (!Object.keys(groupedQuestions).length) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Past Questions</Text>
-        </View>
-        <Text style={styles.subtitle}>
-          {subject} - {level}, {departmentName || "Department"}
-        </Text>
+        <View style={styles.header}><Text style={styles.title}>Past Questions</Text></View>
+        <Text style={styles.subtitle}>{subject} - {level}, {departmentName || "Department"}</Text>
         <View style={styles.emptyContainer}>
           <Ionicons name="document-text-outline" size={64} color="#9CA3AF" />
           <Text style={styles.emptyText}>No questions available</Text>
@@ -359,17 +297,14 @@ export default function PastQuestions() {
     );
   }
 
+  // Main content
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Past Questions</Text>
-      </View>
+      <View style={styles.header}><Text style={styles.title}>Past Questions</Text></View>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: 20, paddingBottom: 20 }}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={refresh} />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
       >
         {Object.entries(groupedQuestions).map(([year, yearQuestions]) => (
           <View key={year} style={styles.yearSection}>
@@ -383,22 +318,12 @@ export default function PastQuestions() {
                     <Text style={styles.cardSubtitle}>Year: {question.year}</Text>
                   </View>
                 </View>
-
                 <View style={styles.buttonContainer}>
-                  {/* View PDF */}
-                  <TouchableOpacity
-                    style={[styles.button, { backgroundColor: "#16A34A" }]}
-                    onPress={() => openPDF(question)}
-                  >
+                  <TouchableOpacity style={[styles.button, { backgroundColor: "#16A34A" }]} onPress={() => openPDF(question)}>
                     <Ionicons name="document-text" size={16} color="#fff" />
                     <Text style={styles.buttonText}>View PDF</Text>
                   </TouchableOpacity>
-
-                  {/* View Solution */}
-                  <TouchableOpacity
-                    style={[styles.button, { backgroundColor: "#2563EB" }]}
-                    onPress={() => handleViewSolution(question)}
-                  >
+                  <TouchableOpacity style={[styles.button, { backgroundColor: "#2563EB" }]} onPress={() => handleViewSolution(question)}>
                     <Ionicons name="play-circle" size={16} color="#fff" />
                     <Text style={styles.buttonText}>Solution</Text>
                   </TouchableOpacity>
@@ -412,7 +337,6 @@ export default function PastQuestions() {
           <View style={styles.commentsHeader}>
             <Text style={styles.commentsTitle}>Questions & Comments</Text>
           </View>
-
           <View style={styles.commentInputContainer}>
             <TextInput
               style={styles.commentInput}
@@ -423,18 +347,11 @@ export default function PastQuestions() {
               onChangeText={setQuestionText}
             />
             <TouchableOpacity
-              style={[
-                styles.submitButton,
-                (!questionText.trim() || uploadingQuestion) && styles.submitButtonDisabled,
-              ]}
+              style={[styles.submitButton, (!questionText.trim() || uploadingQuestion) && styles.submitButtonDisabled]}
               onPress={handleSubmitQuestion}
               disabled={!questionText.trim() || uploadingQuestion}
             >
-              {uploadingQuestion ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Ionicons name="send" size={18} color="#fff" />
-              )}
+              {uploadingQuestion ? <ActivityIndicator color="#fff" /> : <Ionicons name="send" size={18} color="#fff" />}
             </TouchableOpacity>
           </View>
         </View>
@@ -443,7 +360,8 @@ export default function PastQuestions() {
   );
 }
 
-const styles = StyleSheet.create({
+// Styles remain unchanged (can reuse your previous styles)
+const styles = StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: "#F9FAFB",
@@ -658,4 +576,4 @@ const styles = StyleSheet.create({
   submitButtonDisabled: {
     backgroundColor: "#9CA3AF",
   },
-});
+ }); // Paste your existing styles here

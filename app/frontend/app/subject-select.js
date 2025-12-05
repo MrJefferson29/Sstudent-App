@@ -30,13 +30,14 @@ export default function SubjectSelect() {
     [departmentId, level],
     {
       cacheDuration: 10 * 60 * 1000, // 10 minutes cache
-      refetchOnMount: true,
+      refetchOnMount: navigator.onLine, // only fetch if online
     }
   );
 
-  const subjects = response?.data || [];
+  const subjects = Array.isArray(response?.data) ? response.data : [];
 
-  if (isLoading && !refreshing) {
+  // Loading state
+  if (isLoading && !subjects.length) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
@@ -54,7 +55,8 @@ export default function SubjectSelect() {
     );
   }
 
-  if (error && !refreshing) {
+  // Error state (only show if no cached subjects)
+  if (error && !subjects.length) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
@@ -101,9 +103,9 @@ export default function SubjectSelect() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           style={{ marginTop: 20 }}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={refresh} />
-        }
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={refresh} />
+          }
         >
           {subjects.map((subject, index) => (
             <TouchableOpacity
