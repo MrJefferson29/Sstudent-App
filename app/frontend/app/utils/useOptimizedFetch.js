@@ -18,7 +18,6 @@ const cleanupCache = async () => {
     const cacheKeys = keys.filter(key => key.startsWith(CACHE_PREFIX));
     
     if (cacheKeys.length > MAX_CACHE_SIZE) {
-      // Get all cache entries with timestamps
       const entries = await Promise.all(
         cacheKeys.map(async (key) => {
           const data = await AsyncStorage.getItem(key);
@@ -26,8 +25,6 @@ const cleanupCache = async () => {
           return { key, timestamp: parsed.timestamp || 0 };
         })
       );
-      
-      // Sort by timestamp and remove oldest
       entries.sort((a, b) => a.timestamp - b.timestamp);
       const toRemove = entries.slice(0, entries.length - MAX_CACHE_SIZE);
       await AsyncStorage.multiRemove(toRemove.map(e => e.key));
@@ -49,27 +46,19 @@ const getCacheKey = (url, params = {}) => {
 // Get from cache
 const getCachedData = async (cacheKey) => {
   try {
-    // Check memory cache first
     if (memoryCache.has(cacheKey)) {
       const cached = memoryCache.get(cacheKey);
-      if (Date.now() - cached.timestamp < cached.duration) {
-        return cached.data;
-      }
+      if (Date.now() - cached.timestamp < cached.duration) return cached.data;
       memoryCache.delete(cacheKey);
     }
-
-    // Check AsyncStorage
     const cached = await AsyncStorage.getItem(cacheKey);
     if (cached) {
       const parsed = JSON.parse(cached);
       const age = Date.now() - parsed.timestamp;
-      
       if (age < parsed.duration) {
-        // Update memory cache
         memoryCache.set(cacheKey, parsed);
         return parsed.data;
       } else {
-        // Expired, remove it
         await AsyncStorage.removeItem(cacheKey);
       }
     }
@@ -82,59 +71,32 @@ const getCachedData = async (cacheKey) => {
 // Save to cache
 const setCachedData = async (cacheKey, data, duration = CACHE_DURATION) => {
   try {
-    const cacheData = {
-      data,
-      timestamp: Date.now(),
-      duration,
-    };
-    
-    // Update memory cache
+    const cacheData = { data, timestamp: Date.now(), duration };
     memoryCache.set(cacheKey, cacheData);
-    
-    // Update AsyncStorage
     await AsyncStorage.setItem(cacheKey, JSON.stringify(cacheData));
-    
-    // Cleanup if needed
-    if (memoryCache.size > MAX_CACHE_SIZE) {
-      cleanupCache();
-    }
+    if (memoryCache.size > MAX_CACHE_SIZE) cleanupCache();
   } catch (error) {
     console.warn('Cache write error:', error);
   }
 };
 
-// Clear cache for specific key or pattern
+// Clear cache
 export const clearCache = async (pattern) => {
   try {
-    if (pattern) {
-      const keys = await AsyncStorage.getAllKeys();
-      const matchingKeys = keys.filter(key => 
-        key.startsWith(CACHE_PREFIX) && key.includes(pattern)
-      );
-      await AsyncStorage.multiRemove(matchingKeys);
-      matchingKeys.forEach(key => memoryCache.delete(key));
-    } else {
-      // Clear all cache
-      const keys = await AsyncStorage.getAllKeys();
-      const cacheKeys = keys.filter(key => key.startsWith(CACHE_PREFIX));
-      await AsyncStorage.multiRemove(cacheKeys);
-      memoryCache.clear();
-    }
+    const keys = await AsyncStorage.getAllKeys();
+    const cacheKeys = keys.filter(key => key.startsWith(CACHE_PREFIX));
+    const matchingKeys = pattern
+      ? cacheKeys.filter(key => key.includes(pattern))
+      : cacheKeys;
+    await AsyncStorage.multiRemove(matchingKeys);
+    matchingKeys.forEach(key => memoryCache.delete(key));
   } catch (error) {
     console.warn('Cache clear error:', error);
   }
 };
 
 /**
- * Optimized data fetching hook with caching, request cancellation, and deduplication
- * @param {Function} fetchFn - Async function that fetches data
- * @param {Object} options - Configuration options
- * @param {Array} dependencies - Dependencies array for useEffect
- * @param {boolean} options.enabled - Whether to fetch (default: true)
- * @param {number} options.cacheDuration - Cache duration in ms (default: 5 minutes)
- * @param {boolean} options.useCache - Whether to use cache (default: true)
- * @param {number} options.timeout - Request timeout in ms (default: 30000)
- * @param {boolean} options.refetchOnMount - Refetch on mount even if cached (default: false)
+ * Optimized fetch hook with caching, deduplication, offline support
  */
 export const useOptimizedFetch = (fetchFn, dependencies = [], options = {}) => {
   const {
@@ -154,20 +116,17 @@ export const useOptimizedFetch = (fetchFn, dependencies = [], options = {}) => {
   const cacheKeyRef = useRef(null);
   const isMountedRef = useRef(true);
 
-  // Generate cache key from fetch function and dependencies
   const generateCacheKey = useCallback(() => {
     const key = fetchFn.toString() + JSON.stringify(dependencies);
     return getCacheKey(key, dependencies);
   }, [fetchFn, dependencies]);
 
-  // Fetch data with optimizations
   const fetchData = useCallback(async (forceRefresh = false) => {
     if (!enabled) return;
-
     const cacheKey = generateCacheKey();
     cacheKeyRef.current = cacheKey;
 
-    // Check cache first (unless forcing refresh)
+    // Check cache first
     if (useCache && !forceRefresh) {
       const cached = await getCachedData(cacheKey);
       if (cached !== null) {
@@ -176,16 +135,12 @@ export const useOptimizedFetch = (fetchFn, dependencies = [], options = {}) => {
           setIsLoading(false);
           setError(null);
         }
-        
-        // If refetchOnMount, fetch in background to update cache
-        if (refetchOnMount) {
-          fetchData(true);
-        }
+        if (refetchOnMount) fetchData(true);
         return;
       }
     }
 
-    // Request deduplication - if same request is pending, wait for it
+    // Deduplicate requests
     const requestKey = cacheKey;
     if (pendingRequests.has(requestKey)) {
       try {
@@ -196,21 +151,13 @@ export const useOptimizedFetch = (fetchFn, dependencies = [], options = {}) => {
           setError(null);
         }
         return;
-      } catch (err) {
-        // If pending request failed, continue with new request
-      }
+      } catch {}
     }
 
-    // Cancel previous request if exists
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    // Create new abort controller
+    if (abortControllerRef.current) abortControllerRef.current.abort();
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
 
-    // Create request promise
     const requestPromise = (async () => {
       try {
         if (isMountedRef.current && !forceRefresh) {
@@ -218,26 +165,13 @@ export const useOptimizedFetch = (fetchFn, dependencies = [], options = {}) => {
           setError(null);
         }
 
-        // Create timeout
-        const timeoutId = setTimeout(() => {
-          abortController.abort();
-        }, timeout);
-
-        // Fetch data - pass signal if fetchFn accepts it
+        const timeoutId = setTimeout(() => abortController.abort(), timeout);
         const result = await fetchFn(abortController.signal);
-
         clearTimeout(timeoutId);
 
-        if (abortController.signal.aborted) {
-          throw new Error('Request cancelled');
-        }
+        if (abortController.signal.aborted) throw new Error('Request cancelled');
 
-        // Cache the result
-        if (useCache) {
-          await setCachedData(cacheKey, result, cacheDuration);
-        }
-
-        // Remove from pending requests
+        if (useCache) await setCachedData(cacheKey, result, cacheDuration);
         pendingRequests.delete(requestKey);
 
         if (isMountedRef.current) {
@@ -249,65 +183,54 @@ export const useOptimizedFetch = (fetchFn, dependencies = [], options = {}) => {
         return result;
       } catch (err) {
         pendingRequests.delete(requestKey);
-        
-        if (err.name === 'AbortError' || err.message === 'Request cancelled') {
-          // Request was cancelled, don't update state
-          return;
-        }
+        if (err.name === 'AbortError' || err.message === 'Request cancelled') return;
 
         if (isMountedRef.current) {
-          setError(err.response?.data?.message || err.message || 'Failed to fetch data');
-          setIsLoading(false);
+          // Offline fallback
+          const cached = await getCachedData(cacheKey);
+          if (cached !== null) {
+            setData(cached);
+            setError(null);
+            setIsLoading(false);
+          } else {
+            setError(err.response?.data?.message || err.message || 'Failed to fetch data');
+            setIsLoading(false);
+          }
         }
         throw err;
       }
     })();
 
-    // Store pending request
     pendingRequests.set(requestKey, requestPromise);
-
     return requestPromise;
   }, [fetchFn, dependencies, enabled, useCache, cacheDuration, timeout, refetchOnMount, generateCacheKey]);
 
-  // Initial fetch
   useEffect(() => {
     isMountedRef.current = true;
     fetchData();
-
     return () => {
       isMountedRef.current = false;
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      if (abortControllerRef.current) abortControllerRef.current.abort();
     };
   }, [fetchData]);
 
-  // Refresh function
   const refresh = useCallback(async () => {
     setRefreshing(true);
     await fetchData(true);
     setRefreshing(false);
   }, [fetchData]);
 
-  // Clear cache for this query
   const clearCacheForQuery = useCallback(async () => {
     if (cacheKeyRef.current) {
       await clearCache(cacheKeyRef.current.replace(CACHE_PREFIX, ''));
     }
   }, []);
 
-  return {
-    data,
-    isLoading,
-    error,
-    refreshing,
-    refresh,
-    clearCache: clearCacheForQuery,
-  };
+  return { data, isLoading, error, refreshing, refresh, clearCache: clearCacheForQuery };
 };
 
 /**
- * Hook for parallel fetching of multiple queries
+ * Parallel fetch hook
  */
 export const useParallelFetch = (queries) => {
   const results = queries.map(({ fetchFn, dependencies, options }) =>
@@ -323,4 +246,3 @@ export const useParallelFetch = (queries) => {
     },
   };
 };
-
