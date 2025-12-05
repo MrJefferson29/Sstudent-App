@@ -1,236 +1,251 @@
-import React, { useState, useCallback } from 'react';
-import { Sparkles, Loader2, Send } from 'lucide-react';
+import React, { useState, useEffect, useRef } from "react";
+import { View, StyleSheet, Text, TouchableOpacity, Linking, Alert, ActivityIndicator, Platform, BackHandler } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { WebView } from "react-native-webview";
+import { Ionicons } from "@expo/vector-icons";
+import * as FileSystem from "expo-file-system/legacy";
+import { resolveAssetUrl, questionsAPI } from "./utils/api";
 
-// --- Firebase Configuration & Imports (Required for persistent storage, though not used in this demo) ---
-// Note: Since
+// Use standard directories
+const PDF_DIR = FileSystem.documentDirectory + 'pdfs/';
 
-// The main application component
-const App = () => {
-    const [prompt, setPrompt] = useState('');
-    const [response, setResponse] = useState(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState(null);
-
-    // Initialize Firebase (run once)
-    React.useEffect(() => {
-        if (Object.keys(firebaseConfig).length > 0) {
-            try {
-                const app = initializeApp(firebaseConfig);
-                const auth = getAuth(app);
-                getFirestore(app); // Initialize Firestore
-                
-                const authenticate = async () => {
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-                };
-                authenticate();
-            } catch (e) {
-                console.error("Firebase initialization failed:", e);
-            }
-        }
-    }, []);
-
-    // Function to handle the API call with exponential backoff
-    const fetchContent = useCallback(async (userPrompt) => {
-        const apiKey = ""; // API Key is provided by the Canvas environment automatically
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-        
-        const systemPrompt = "You are a concise, helpful, and creative assistant. Always format your responses clearly using Markdown.";
-        
-        const payload = {
-            contents: [{ parts: [{ text: userPrompt }] }],
-            systemInstruction: {
-                parts: [{ text: systemPrompt }]
-            },
-            // Using Google Search grounding for up-to-date information
-            tools: [{ "google_search": {} }], 
-        };
-
-        const maxRetries = 5;
-        for (let attempt = 0; attempt < maxRetries; attempt++) {
-            try {
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const result = await response.json();
-                const candidate = result.candidates?.[0];
-
-                if (candidate && candidate.content?.parts?.[0]?.text) {
-                    const text = candidate.content.parts[0].text;
-                    let sources = [];
-                    const groundingMetadata = candidate.groundingMetadata;
-                    
-                    if (groundingMetadata && groundingMetadata.groundingAttributions) {
-                        sources = groundingMetadata.groundingAttributions
-                            .map(attribution => ({
-                                uri: attribution.web?.uri,
-                                title: attribution.web?.title,
-                            }))
-                            .filter(source => source.uri && source.title);
-                    }
-                    
-                    return { text, sources };
-                } else {
-                    return { text: "No content generated.", sources: [] };
-                }
-
-            } catch (err) {
-                if (attempt < maxRetries - 1) {
-                    const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                } else {
-                    throw err; // Re-throw error after max retries
-                }
-            }
-        }
-    }, []);
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!prompt.trim()) return;
-
-        setIsLoading(true);
-        setError(null);
-        setResponse(null);
-
-        try {
-            const result = await fetchContent(prompt);
-            setResponse(result);
-        } catch (err) {
-            console.error("API Call Error:", err);
-            setError("Failed to fetch content. Please try again later.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const renderResponse = () => {
-        if (!response) return null;
-
-        return (
-            <div className="p-4 bg-white rounded-xl shadow-lg border border-gray-100 mt-6">
-                <h3 className="flex items-center text-lg font-semibold text-indigo-700 mb-3 border-b pb-2">
-                    <Sparkles className="w-5 h-5 mr-2 text-yellow-500" />
-                    Generated Content
-                </h3>
-                <div className="prose max-w-none text-gray-700 whitespace-pre-wrap">
-                    {response.text}
-                </div>
-
-                {response.sources.length > 0 && (
-                    <div className="mt-4 pt-3 border-t border-gray-200">
-                        <p className="text-sm font-medium text-gray-500 mb-2">Sources:</p>
-                        <ul className="list-disc list-inside text-xs space-y-1">
-                            {response.sources.map((source, index) => (
-                                <li key={index} className="text-gray-600 truncate">
-                                    <a 
-                                        href={source.uri} 
-                                        target="_blank" 
-                                        rel="noopener noreferrer"
-                                        className="text-indigo-500 hover:text-indigo-700 transition duration-150"
-                                        title={source.title}
-                                    >
-                                        {source.title || source.uri}
-                                    </a>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                )}
-            </div>
-        );
-    };
-
-    return (
-        <div className="min-h-screen bg-gray-50 p-4 sm:p-8 font-inter">
-            <style>{`
-                /* Inter font loading (Tailwind default) */
-                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-                .font-inter {
-                    font-family: 'Inter', sans-serif;
-                }
-                .prose {
-                    /* Custom styles for the generated content rendering */
-                    max-width: 100%;
-                }
-                .prose pre {
-                    background-color: #f3f4f6;
-                    padding: 0.75rem;
-                    border-radius: 0.5rem;
-                    overflow-x: auto;
-                }
-            `}</style>
-
-            <div className="max-w-3xl mx-auto">
-                <header className="text-center mb-8">
-                    <h1 className="text-4xl font-extrabold text-gray-900 flex items-center justify-center">
-                        <Sparkles className="w-8 h-8 text-indigo-500 mr-2" />
-                        Gemini Web Assistant
-                    </h1>
-                    <p className="mt-2 text-gray-500">
-                        Get up-to-date, grounded answers using the Gemini 2.5 Flash model.
-                    </p>
-                </header>
-
-                <div className="bg-white p-6 rounded-2xl shadow-xl">
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="relative">
-                            <textarea
-                                id="prompt"
-                                className="w-full p-4 pr-16 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 resize-none h-32"
-                                placeholder="Ask me anything, like 'Summarize the latest trends in renewable energy.'"
-                                value={prompt}
-                                onChange={(e) => setPrompt(e.target.value)}
-                                disabled={isLoading}
-                                required
-                            />
-                            <button
-                                type="submit"
-                                className={`absolute bottom-4 right-4 p-3 rounded-full text-white transition duration-200 shadow-lg ${
-                                    isLoading || !prompt.trim()
-                                        ? 'bg-gray-400 cursor-not-allowed'
-                                        : 'bg-indigo-600 hover:bg-indigo-700 active:scale-95'
-                                }`}
-                                disabled={isLoading || !prompt.trim()}
-                                aria-label="Generate Content"
-                            >
-                                {isLoading ? (
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                ) : (
-                                    <Send className="w-5 h-5" />
-                                )}
-                            </button>
-                        </div>
-                    </form>
-
-                    {isLoading && (
-                        <div className="flex items-center justify-center mt-6 p-4 bg-indigo-50 rounded-xl text-indigo-700">
-                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                            Generating response...
-                        </div>
-                    )}
-
-                    {error && (
-                        <div className="mt-6 p-4 bg-red-100 rounded-xl text-red-700 border border-red-300">
-                            <strong>Error:</strong> {error}
-                        </div>
-                    )}
-
-                    {renderResponse()}
-                </div>
-            </div>
-        </div>
-    );
+const ensureDirectory = async () => {
+  const dirInfo = await FileSystem.getInfoAsync(PDF_DIR);
+  if (!dirInfo.exists) {
+    await FileSystem.makeDirectoryAsync(PDF_DIR, { intermediates: true });
+  }
 };
 
-export default App;
+const getFilename = (url) => {
+  try {
+    const name = url.split('/').pop().split('?')[0];
+    return name.endsWith('.pdf') ? name : `${name}.pdf`;
+  } catch {
+    return `document_${Date.now()}.pdf`;
+  }
+};
+
+export default function PDFViewer() {
+  const { file, pdfUrl, title, questionId } = useLocalSearchParams();
+  const router = useRouter();
+  
+  // State
+  const [loading, setLoading] = useState(true);
+  const [displayUrl, setDisplayUrl] = useState(null); // The URL passed to WebView
+  const [localPath, setLocalPath] = useState(null);   // The path on the file system
+  const [isDownloaded, setIsDownloaded] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloading, setDownloading] = useState(false);
+
+  // Refs to prevent double-initialization
+  const isMounted = useRef(true);
+
+  const rawUrl = pdfUrl || file;
+  
+  useEffect(() => {
+    isMounted.current = true;
+    initializeViewer();
+    return () => { isMounted.current = false; };
+  }, [rawUrl]);
+
+  const initializeViewer = async () => {
+    try {
+      await ensureDirectory();
+      
+      let urlToUse = resolveAssetUrl(rawUrl) || rawUrl;
+      const filename = getFilename(urlToUse);
+      const fsPath = PDF_DIR + filename;
+
+      // 1. Handle Cloudinary Signed URLs if needed
+      if (questionId && urlToUse && urlToUse.includes('res.cloudinary.com')) {
+         try {
+           const response = await questionsAPI.getSignedUrl(questionId);
+           if (response.success && response.url) urlToUse = response.url;
+         } catch (e) { console.warn("Using public URL"); }
+      }
+
+      // 2. Check if we already have it downloaded
+      const fileInfo = await FileSystem.getInfoAsync(fsPath);
+      
+      if (fileInfo.exists) {
+        setLocalPath(fsPath);
+        setIsDownloaded(true);
+        
+        // CRITICAL FIX FOR ANDROID CRASH:
+        if (Platform.OS === 'android') {
+          // On Android, we CANNOT view a local file:// in WebView.
+          // We must continue to use the Remote URL via Google Viewer.
+          setDisplayUrl(urlToUse); 
+        } else {
+          // On iOS, we prefer the local file for speed.
+          setDisplayUrl(fsPath);
+        }
+      } else {
+        // Not downloaded yet, use remote
+        setDisplayUrl(urlToUse);
+        // Start background download
+        downloadPDF(urlToUse, fsPath);
+      }
+      
+      setLoading(false);
+
+    } catch (error) {
+      console.error("Init error:", error);
+      Alert.alert("Error", "Could not load PDF details");
+      setLoading(false);
+    }
+  };
+
+  const downloadPDF = async (url, savePath) => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      const downloadResumable = FileSystem.createDownloadResumable(
+        url,
+        savePath,
+        {},
+        (progress) => {
+            const p = progress.totalBytesWritten / progress.totalBytesExpectedToWrite;
+            if(isMounted.current) setDownloadProgress(p);
+        }
+      );
+      const result = await downloadResumable.downloadAsync();
+      if (result && isMounted.current) {
+        setIsDownloaded(true);
+        setLocalPath(result.uri);
+      }
+    } catch (e) {
+      console.log("Download failed (non-critical):", e);
+    } finally {
+      if(isMounted.current) setDownloading(false);
+    }
+  };
+
+  const handleOpenExternal = async () => {
+    try {
+      // Prefer local file if available, else remote
+      const url = localPath || displayUrl;
+      
+      if (Platform.OS === 'android' && localPath) {
+        // On Android, to open a local file, we usually need a Content URI (Expo Sharing)
+        // But Linking can sometimes handle file:// if a PDF reader is installed
+        const contentUri = await FileSystem.getContentUriAsync(localPath);
+        await Linking.openURL(contentUri);
+      } else {
+        await Linking.openURL(url);
+      }
+    } catch (e) {
+      Alert.alert("Error", "No app available to open this PDF.");
+    }
+  };
+
+  // --- RENDER LOGIC ---
+
+  // Generate the Source object for WebView
+  const getWebViewSource = () => {
+    if (!displayUrl) return null;
+
+    if (Platform.OS === 'ios') {
+      // iOS can render PDF directly
+      return { uri: displayUrl };
+    } 
+    
+    // ANDROID LOGIC
+    if (Platform.OS === 'android') {
+      // We must use Google Docs Viewer for Android WebView
+      // We cannot feed it a file:// URL. It must be http/https.
+      if (displayUrl.startsWith('file://')) {
+          // If we ended up here with a file path on Android, we can't show it in WebView.
+          return null; 
+      }
+      return { uri: `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(displayUrl)}` };
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.title} numberOfLines={1}>{title || "Document"}</Text>
+          {isDownloaded && <Text style={styles.subtitle}>Saved on device</Text>}
+        </View>
+        <TouchableOpacity onPress={handleOpenExternal} style={styles.headerButton}>
+          <Ionicons name="open-outline" size={24} color="#fff" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Progress Bar */}
+      {downloading && (
+        <View style={{height: 2, backgroundColor: '#E2E8F0', width: '100%'}}>
+           <View style={{height: '100%', backgroundColor: '#10B981', width: `${downloadProgress * 100}%`}} />
+        </View>
+      )}
+
+      {/* Main Content */}
+      <View style={styles.content}>
+        {loading ? (
+           <View style={styles.center}>
+             <ActivityIndicator size="large" color="#3B82F6" />
+             <Text style={styles.loadingText}>Preparing PDF...</Text>
+           </View>
+        ) : (
+          <>
+            {/* ANDROID FALLBACK FOR OFFLINE/LOCAL FILES */}
+            {Platform.OS === 'android' && displayUrl && displayUrl.startsWith('file://') ? (
+               <View style={styles.center}>
+                 <Ionicons name="document-text" size={64} color="#94A3B8" />
+                 <Text style={styles.errorText}>
+                   Android cannot view offline PDFs inside the app.
+                 </Text>
+                 <TouchableOpacity style={styles.openBtn} onPress={handleOpenExternal}>
+                   <Text style={styles.openBtnText}>Open with PDF Viewer</Text>
+                 </TouchableOpacity>
+               </View>
+            ) : (
+              /* THE WEBVIEW */
+              <WebView
+                originWhitelist={['*']}
+                source={getWebViewSource()}
+                style={styles.webview}
+                startInLoadingState={true}
+                renderLoading={() => (
+                  <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size="large" color="#3B82F6" />
+                  </View>
+                )}
+                onError={(e) => console.log("WebView Error", e.nativeEvent)}
+              />
+            )}
+          </>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  header: {
+    flexDirection: "row", alignItems: "center", backgroundColor: "#1E293B",
+    paddingTop: Platform.OS === 'ios' ? 50 : 20, paddingBottom: 16, paddingHorizontal: 16
+  },
+  headerButton: { padding: 8 },
+  headerTitleContainer: { flex: 1, alignItems: "center" },
+  title: { fontSize: 16, fontWeight: "600", color: "#F8FAFC" },
+  subtitle: { fontSize: 10, color: "#10B981", marginTop: 2 },
+  content: { flex: 1, position: 'relative' },
+  webview: { flex: 1, backgroundColor: 'transparent' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  loadingText: { marginTop: 10, color: '#64748B' },
+  loadingOverlay: {
+    position: 'absolute', top:0, left:0, right:0, bottom:0, 
+    justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC'
+  },
+  errorText: { textAlign: 'center', color: '#64748B', marginTop: 16, marginBottom: 24 },
+  openBtn: { backgroundColor: '#3B82F6', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 },
+  openBtnText: { color: 'white', fontWeight: '600' }
+});

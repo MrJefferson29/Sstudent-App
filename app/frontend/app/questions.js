@@ -315,7 +315,7 @@ export default function PastQuestions() {
   }
 
   // Render error state
-  if (error && !refreshing) {
+  if (error && refreshing) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
