@@ -9,6 +9,10 @@ const bookSchema = new mongoose.Schema(
     publishedDate: { type: String, trim: true },
     pdfUrl: { type: String, required: true },
     pdfPublicId: { type: String }, // For storage reference (Firebase path or direct path)
+    thumbnail: {
+      url: { type: String, trim: true },
+      publicId: { type: String, trim: true },
+    },
     uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   },
   { timestamps: true }

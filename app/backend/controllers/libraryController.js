@@ -27,15 +27,31 @@ exports.createBook = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Title is required' });
     }
 
-    if (!req.file) {
+    // Handle both req.file (single) and req.files (fields)
+    const pdfFile = req.file || (req.files?.pdf && req.files.pdf[0]);
+    if (!pdfFile) {
       return res.status(400).json({ success: false, message: 'PDF file is required' });
     }
 
-    const upload = await uploadBuffer(req.file.buffer, {
+    const upload = await uploadBuffer(pdfFile.buffer, {
       folder: 'library',
       contentType: 'application/pdf',
-      filename: req.file.originalname,
+      filename: pdfFile.originalname,
     });
+
+    let thumbnailData = null;
+    const thumbnailFile = req.files?.thumbnail?.[0];
+    if (thumbnailFile) {
+      const thumbnailUpload = await uploadBuffer(thumbnailFile.buffer, {
+        folder: 'library/thumbnails',
+        contentType: thumbnailFile.mimetype,
+        filename: thumbnailFile.originalname,
+      });
+      thumbnailData = {
+        url: thumbnailUpload.secure_url,
+        publicId: thumbnailUpload.public_id,
+      };
+    }
 
     const book = await Book.create({
       title: title.trim(),
@@ -45,6 +61,7 @@ exports.createBook = async (req, res) => {
       publishedDate: publishedDate || '',
       pdfUrl: upload.secure_url,
       pdfPublicId: upload.public_id,
+      thumbnail: thumbnailData,
       uploadedBy: req.userId,
     });
 
@@ -118,17 +135,36 @@ exports.updateBook = async (req, res) => {
     if (description !== undefined) book.description = description;
     if (publishedDate !== undefined) book.publishedDate = publishedDate;
 
-    if (req.file) {
+    // Handle PDF update
+    const pdfFile = req.file || (req.files?.pdf && req.files.pdf[0]);
+    if (pdfFile) {
       if (book.pdfPublicId) {
         await deleteResource(book.pdfPublicId);
       }
-      const upload = await uploadBuffer(req.file.buffer, {
+      const upload = await uploadBuffer(pdfFile.buffer, {
         folder: 'library',
         contentType: 'application/pdf',
-        filename: req.file.originalname,
+        filename: pdfFile.originalname,
       });
       book.pdfUrl = upload.secure_url;
       book.pdfPublicId = upload.public_id;
+    }
+
+    // Handle thumbnail upload
+    const thumbnailFile = req.files?.thumbnail?.[0];
+    if (thumbnailFile) {
+      if (book.thumbnail && book.thumbnail.publicId) {
+        await deleteResource(book.thumbnail.publicId);
+      }
+      const thumbnailUpload = await uploadBuffer(thumbnailFile.buffer, {
+        folder: 'library/thumbnails',
+        contentType: thumbnailFile.mimetype,
+        filename: thumbnailFile.originalname,
+      });
+      book.thumbnail = {
+        url: thumbnailUpload.secure_url,
+        publicId: thumbnailUpload.public_id,
+      };
     }
 
     await book.save();
@@ -152,6 +188,9 @@ exports.deleteBook = async (req, res) => {
 
     if (book.pdfPublicId) {
       await deleteResource(book.pdfPublicId);
+    }
+    if (book.thumbnail && book.thumbnail.publicId) {
+      await deleteResource(book.thumbnail.publicId);
     }
     await Book.findByIdAndDelete(req.params.id);
     res.json({ success: true, message: 'Book deleted successfully' });
