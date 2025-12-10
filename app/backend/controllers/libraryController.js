@@ -28,29 +28,38 @@ exports.createBook = async (req, res) => {
     }
 
     // Handle both req.file (single) and req.files (fields)
-    const pdfFile = req.file || (req.files?.pdf && req.files.pdf[0]);
+    const pdfFile = req.file || (req.files && req.files.pdf && req.files.pdf[0]);
     if (!pdfFile) {
       return res.status(400).json({ success: false, message: 'PDF file is required' });
+    }
+
+    if (!pdfFile.buffer) {
+      return res.status(400).json({ success: false, message: 'PDF file buffer is missing' });
     }
 
     const upload = await uploadBuffer(pdfFile.buffer, {
       folder: 'library',
       contentType: 'application/pdf',
-      filename: pdfFile.originalname,
+      filename: pdfFile.originalname || 'book.pdf',
     });
 
     let thumbnailData = null;
-    const thumbnailFile = req.files?.thumbnail?.[0];
-    if (thumbnailFile) {
-      const thumbnailUpload = await uploadBuffer(thumbnailFile.buffer, {
-        folder: 'library/thumbnails',
-        contentType: thumbnailFile.mimetype,
-        filename: thumbnailFile.originalname,
-      });
-      thumbnailData = {
-        url: thumbnailUpload.secure_url,
-        publicId: thumbnailUpload.public_id,
-      };
+    const thumbnailFile = req.files && req.files.thumbnail && req.files.thumbnail[0];
+    if (thumbnailFile && thumbnailFile.buffer) {
+      try {
+        const thumbnailUpload = await uploadBuffer(thumbnailFile.buffer, {
+          folder: 'library/thumbnails',
+          contentType: thumbnailFile.mimetype || 'image/jpeg',
+          filename: thumbnailFile.originalname || 'thumbnail.jpg',
+        });
+        thumbnailData = {
+          url: thumbnailUpload.secure_url,
+          publicId: thumbnailUpload.public_id,
+        };
+      } catch (thumbError) {
+        console.error('Thumbnail upload error (non-fatal):', thumbError);
+        // Continue without thumbnail if upload fails
+      }
     }
 
     const book = await Book.create({
@@ -136,35 +145,45 @@ exports.updateBook = async (req, res) => {
     if (publishedDate !== undefined) book.publishedDate = publishedDate;
 
     // Handle PDF update
-    const pdfFile = req.file || (req.files?.pdf && req.files.pdf[0]);
-    if (pdfFile) {
-      if (book.pdfPublicId) {
-        await deleteResource(book.pdfPublicId);
+    const pdfFile = req.file || (req.files && req.files.pdf && req.files.pdf[0]);
+    if (pdfFile && pdfFile.buffer) {
+      try {
+        if (book.pdfPublicId) {
+          await deleteResource(book.pdfPublicId);
+        }
+        const upload = await uploadBuffer(pdfFile.buffer, {
+          folder: 'library',
+          contentType: 'application/pdf',
+          filename: pdfFile.originalname || 'book.pdf',
+        });
+        book.pdfUrl = upload.secure_url;
+        book.pdfPublicId = upload.public_id;
+      } catch (pdfError) {
+        console.error('PDF upload error:', pdfError);
+        throw new Error('Failed to upload PDF file');
       }
-      const upload = await uploadBuffer(pdfFile.buffer, {
-        folder: 'library',
-        contentType: 'application/pdf',
-        filename: pdfFile.originalname,
-      });
-      book.pdfUrl = upload.secure_url;
-      book.pdfPublicId = upload.public_id;
     }
 
     // Handle thumbnail upload
-    const thumbnailFile = req.files?.thumbnail?.[0];
-    if (thumbnailFile) {
-      if (book.thumbnail && book.thumbnail.publicId) {
-        await deleteResource(book.thumbnail.publicId);
+    const thumbnailFile = req.files && req.files.thumbnail && req.files.thumbnail[0];
+    if (thumbnailFile && thumbnailFile.buffer) {
+      try {
+        if (book.thumbnail && book.thumbnail.publicId) {
+          await deleteResource(book.thumbnail.publicId);
+        }
+        const thumbnailUpload = await uploadBuffer(thumbnailFile.buffer, {
+          folder: 'library/thumbnails',
+          contentType: thumbnailFile.mimetype || 'image/jpeg',
+          filename: thumbnailFile.originalname || 'thumbnail.jpg',
+        });
+        book.thumbnail = {
+          url: thumbnailUpload.secure_url,
+          publicId: thumbnailUpload.public_id,
+        };
+      } catch (thumbError) {
+        console.error('Thumbnail upload error (non-fatal):', thumbError);
+        // Continue without updating thumbnail if upload fails
       }
-      const thumbnailUpload = await uploadBuffer(thumbnailFile.buffer, {
-        folder: 'library/thumbnails',
-        contentType: thumbnailFile.mimetype,
-        filename: thumbnailFile.originalname,
-      });
-      book.thumbnail = {
-        url: thumbnailUpload.secure_url,
-        publicId: thumbnailUpload.public_id,
-      };
     }
 
     await book.save();

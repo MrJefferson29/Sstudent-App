@@ -63,9 +63,34 @@ const uploadFields = (req, res, next) => {
   });
 };
 
+// File filter for multer fields - validate based on field name
+const fileFilter = (req, file, cb) => {
+  // PDF field should only accept PDFs
+  if (file.fieldname === 'pdf') {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('PDF field must contain a PDF file'), false);
+    }
+  }
+  // Thumbnail field should only accept images
+  else if (file.fieldname === 'thumbnail') {
+    if (file.mimetype && file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Thumbnail field must contain an image file'), false);
+    }
+  }
+  // Unknown field
+  else {
+    cb(new Error(`Unexpected field: ${file.fieldname}`), false);
+  }
+};
+
 // Alternative: Use fields for simultaneous upload
 const uploadMultiple = multer({
   storage,
+  fileFilter: fileFilter,
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB
   },
@@ -78,43 +103,36 @@ const uploadMultiple = multer({
 const handleUploads = (req, res, next) => {
   uploadMultiple(req, res, (err) => {
     if (err) {
-      // If it's a file type error, try to provide better message
-      if (err.message.includes('Unexpected field')) {
-        return next(new Error('Invalid file field. Use "pdf" for PDF and "thumbnail" for images.'));
+      console.error('Upload middleware error:', err);
+      // For multer errors, return proper error response
+      return res.status(400).json({ 
+        success: false, 
+        message: err.message || 'File upload error' 
+      });
+    }
+    
+    try {
+      // Validate PDF is present for create (not required for update)
+      if (req.method === 'POST' && !req.files?.pdf?.[0]) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'PDF file is required for creating a book' 
+        });
       }
-      return next(err);
-    }
-    
-    // Validate PDF is present for create/update
-    if ((req.method === 'POST' || req.method === 'PUT') && !req.files?.pdf?.[0]) {
-      // Only require PDF on create, not on update
-      if (req.method === 'POST') {
-        return next(new Error('PDF file is required'));
+      
+      // For backward compatibility, also set req.file to PDF if present
+      if (req.files?.pdf?.[0]) {
+        req.file = req.files.pdf[0];
       }
+      
+      next();
+    } catch (validationError) {
+      console.error('Validation error:', validationError);
+      return res.status(400).json({ 
+        success: false, 
+        message: validationError.message || 'File validation error' 
+      });
     }
-    
-    // Validate PDF file type
-    if (req.files?.pdf?.[0]) {
-      const pdfFile = req.files.pdf[0];
-      if (pdfFile.mimetype !== 'application/pdf') {
-        return next(new Error('PDF file must be of type application/pdf'));
-      }
-    }
-    
-    // Validate thumbnail file type if present
-    if (req.files?.thumbnail?.[0]) {
-      const thumbFile = req.files.thumbnail[0];
-      if (!thumbFile.mimetype.startsWith('image/')) {
-        return next(new Error('Thumbnail must be an image file'));
-      }
-    }
-    
-    // For backward compatibility, also set req.file to PDF if present
-    if (req.files?.pdf?.[0]) {
-      req.file = req.files.pdf[0];
-    }
-    
-    next();
   });
 };
 

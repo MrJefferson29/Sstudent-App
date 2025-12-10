@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useContext } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,8 @@ import axios from 'axios';
 import { io } from 'socket.io-client';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { AuthContext } from '../Contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
 
@@ -45,55 +47,63 @@ const darkColors = {
   gradientPrimary: ['#1C2833', '#2E4053'],
 };
 
-const TOPIC_FILTERS = ['All Chats', 'Assignments', 'Exams', 'Projects', 'Resources'];
-
 const MessageBubble = React.memo(({ msg, myUsername, colors }) => {
   const senderName = msg.user || msg.username || 'System';
-  const isMyMessage = senderName === myUsername;
+  // Normalize usernames for comparison (case-insensitive, trimmed)
+  const normalizedSender = String(senderName).toLowerCase().trim();
+  const normalizedMyUsername = String(myUsername).toLowerCase().trim();
+  const isMyMessage = normalizedSender === normalizedMyUsername || normalizedSender === 'me';
 
   return (
     <View
       style={[
-        styles.bubble,
-        isMyMessage
-          ? {
-              backgroundColor: colors.chatUser,
-              alignSelf: 'flex-end',
-              borderTopLeftRadius: 10,
-              borderTopRightRadius: 10,
-              borderBottomLeftRadius: 10,
-              borderBottomRightRadius: 0,
-            }
-          : {
-              backgroundColor: colors.chatBot,
-              alignSelf: 'flex-start',
-              borderTopLeftRadius: 10,
-              borderTopRightRadius: 10,
-              borderBottomLeftRadius: 0,
-              borderBottomRightRadius: 10,
-            },
+        styles.bubbleWrapper,
+        isMyMessage ? styles.bubbleWrapperRight : styles.bubbleWrapperLeft,
       ]}
     >
-      {!isMyMessage && <Text style={[styles.user, { color: colors.primary }]}>{senderName}</Text>}
+      <View
+        style={[
+          styles.bubble,
+          isMyMessage
+            ? {
+                backgroundColor: colors.chatUser,
+                borderTopLeftRadius: 18,
+                borderTopRightRadius: 18,
+                borderBottomLeftRadius: 18,
+                borderBottomRightRadius: 4,
+              }
+            : {
+                backgroundColor: colors.chatBot,
+                borderTopLeftRadius: 18,
+                borderTopRightRadius: 18,
+                borderBottomLeftRadius: 4,
+                borderBottomRightRadius: 18,
+              },
+        ]}
+      >
+        {!isMyMessage && (
+          <Text style={[styles.user, { color: colors.primary }]}>{senderName}</Text>
+        )}
 
-      <Text style={[styles.bubbleText, { color: isMyMessage ? '#fff' : colors.textPrimary }]}>
-        {msg.text}
-      </Text>
-
-      <View style={styles.bubbleFooter}>
-        <Text
-          style={[
-            styles.bubbleTime,
-            {
-              color: isMyMessage ? 'rgba(255,255,255,0.6)' : colors.textSecondary,
-              textAlign: isMyMessage ? 'right' : 'left',
-            },
-          ]}
-        >
-          {msg.timestamp
-            ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        <Text style={[styles.bubbleText, { color: isMyMessage ? '#fff' : colors.textPrimary }]}>
+          {msg.text}
         </Text>
+
+        <View style={styles.bubbleFooter}>
+          <Text
+            style={[
+              styles.bubbleTime,
+              {
+                color: isMyMessage ? 'rgba(255,255,255,0.7)' : colors.textSecondary,
+                textAlign: isMyMessage ? 'right' : 'left',
+              },
+            ]}
+          >
+            {msg.timestamp
+              ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -102,20 +112,29 @@ const MessageBubble = React.memo(({ msg, myUsername, colors }) => {
 export default function StudyGroupsScreen() {
   const colors = darkColors;
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { user } = useContext(AuthContext);
 
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState([]);
   const [typingUser, setTypingUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [selectedFilter, setSelectedFilter] = useState(TOPIC_FILTERS[0]);
   const [activeMembers, setActiveMembers] = useState(0);
 
   const flatListRef = useRef(null);
-  const usernameRef = useRef('Me');
+  // Get username from user data (email, name, or fallback to 'Me')
+  const usernameRef = useRef(
+    user?.name || user?.email?.split('@')[0] || user?.username || 'Me'
+  );
   const groupIdRef = useRef(null);
   const socketRef = useRef(null);
   const activeMembersRef = useRef(new Set());
   const fadeAnim = useRef(new Animated.Value(1)).current;
+
+  // Update username when user changes
+  useEffect(() => {
+    usernameRef.current = user?.name || user?.email?.split('@')[0] || user?.username || 'Me';
+  }, [user]);
 
   // API URL resolver
   const API_URL = useMemo(() => {
@@ -303,47 +322,29 @@ export default function StudyGroupsScreen() {
       >
         {/* Header */}
         <LinearGradient colors={colors.gradientPrimary} style={[styles.header, { paddingTop: insets.top + 12 }]}>
-          <TouchableOpacity style={[styles.backButton, { backgroundColor: 'rgba(255,255,255,0.12)' }]} onPress={() => { /* navigate to group settings */ }}>
+          <TouchableOpacity 
+            style={[styles.backButton, { backgroundColor: 'rgba(255,255,255,0.12)' }]} 
+            onPress={() => router.push('/( tabs )/profile')}
+            activeOpacity={0.7}
+          >
             <Ionicons name="settings-outline" size={22} color="#fff" />
           </TouchableOpacity>
 
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle}>Study Group 📚</Text>
             <Text style={styles.headerSubtitle}>
-              Topic: {selectedFilter}  |  {activeMembers} Active
+              {activeMembers} Active Member{activeMembers !== 1 ? 's' : ''}
             </Text>
           </View>
 
-          <TouchableOpacity style={[styles.fab, { backgroundColor: colors.accent }]} onPress={() => { /* show members */ }}>
+          <TouchableOpacity 
+            style={[styles.fab, { backgroundColor: colors.accent }]} 
+            onPress={() => router.push('/( tabs )/profile')}
+            activeOpacity={0.7}
+          >
             <MaterialCommunityIcons name="account-group" size={20} color="#fff" />
           </TouchableOpacity>
         </LinearGradient>
-
-        {/* Filters row */}
-        <View style={[styles.filtersRow, { backgroundColor: colors.background }]}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersScrollContent}>
-            {TOPIC_FILTERS.map((filter) => {
-              const active = selectedFilter === filter;
-              return (
-                <TouchableOpacity
-                  key={filter}
-                  style={[
-                    styles.filterChip,
-                    active
-                      ? { backgroundColor: colors.primary, borderColor: 'transparent' }
-                      : { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 },
-                  ]}
-                  onPress={() => setSelectedFilter(filter)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={active ? { color: colors.background, fontWeight: '700' } : { color: colors.textSecondary, fontWeight: '600' }}>
-                    {filter}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
 
         {/* Chat messages */}
         <FlatList
@@ -484,26 +485,10 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
   },
 
-  // Filters
-  filtersRow: {
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: darkColors.border,
-    zIndex: 1,
-  },
-  filtersScrollContent: {
-    paddingHorizontal: 15,
-  },
-  filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-  },
 
   // Chat list
   flatListContentAdjusted: {
-    padding: 10,
+    paddingVertical: 10,
     flexGrow: 1,
     justifyContent: 'flex-end',
   },
@@ -529,17 +514,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 
+  // Bubble wrapper for proper alignment
+  bubbleWrapper: {
+    width: '100%',
+    marginVertical: 4,
+    paddingHorizontal: 12,
+  },
+  bubbleWrapperLeft: {
+    alignItems: 'flex-start',
+  },
+  bubbleWrapperRight: {
+    alignItems: 'flex-end',
+  },
   // Bubble
   bubble: {
     maxWidth: '78%',
-    marginVertical: 6,
-    padding: 12,
-    marginHorizontal: 10,
+    padding: 14,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
   user: {
     fontWeight: '700',

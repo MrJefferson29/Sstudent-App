@@ -56,26 +56,39 @@ export default function LibraryScreen() {
     >
       <View style={styles.thumbnailContainer}>
         {item.thumbnail?.url ? (
-          <Image source={{ uri: resolveAssetUrl(item.thumbnail.url) }} style={styles.thumbnail} />
+          <Image 
+            source={{ uri: resolveAssetUrl(item.thumbnail.url) }} 
+            style={styles.thumbnail}
+            resizeMode="cover"
+          />
         ) : (
           <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
-            <Ionicons name="book" size={32} color="#94A3B8" />
+            <Ionicons name="book" size={40} color="#94A3B8" />
           </View>
         )}
       </View>
       <View style={styles.bookInfo}>
         <Text style={styles.bookTitle} numberOfLines={2}>{item.title}</Text>
-        <Text style={styles.bookAuthor} numberOfLines={1}>{item.author || "Unknown Author"}</Text>
+        <View style={styles.authorRow}>
+          <Ionicons name="person-outline" size={14} color="#64748B" />
+          <Text style={styles.bookAuthor} numberOfLines={1}>{item.author || "Unknown Author"}</Text>
+        </View>
         <View style={styles.metaRow}>
           <View style={styles.categoryLabel}>
+            <Ionicons name="pricetag" size={12} color="#3498DB" />
             <Text style={styles.categoryText}>{item.category || "General"}</Text>
           </View>
           {item.publishedDate && (
-            <Text style={styles.publishedDate}>{item.publishedDate}</Text>
+            <View style={styles.dateContainer}>
+              <Ionicons name="calendar-outline" size={12} color="#94A3B8" />
+              <Text style={styles.publishedDate}>{item.publishedDate}</Text>
+            </View>
           )}
         </View>
       </View>
-      <Ionicons name="chevron-forward" size={22} color="#64748B" />
+      <View style={styles.chevronContainer}>
+        <Ionicons name="chevron-forward" size={22} color="#3498DB" />
+      </View>
     </TouchableOpacity>
   );
 
@@ -260,23 +273,28 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 16,
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#E2E8F0",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   thumbnailContainer: {
     marginRight: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   thumbnail: {
-    width: 70,
-    height: 100,
-    borderRadius: 8,
+    width: 80,
+    height: 120,
+    borderRadius: 10,
     backgroundColor: "#F1F5F9",
   },
   thumbnailPlaceholder: {
@@ -291,36 +309,53 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#1E293B",
-    marginBottom: 4,
+    marginBottom: 6,
     lineHeight: 24,
+  },
+  authorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+    gap: 6,
   },
   bookAuthor: {
     color: "#64748B",
     fontSize: 14,
-    marginBottom: 8,
     fontWeight: "500",
+    flex: 1,
   },
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 10,
   },
   categoryLabel: {
     backgroundColor: "#ECF5FF",
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingVertical: 6,
+    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   categoryText: {
     color: "#3498DB",
     fontWeight: "600",
     fontSize: 12,
   },
+  dateContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   publishedDate: {
     color: "#94A3B8",
     fontSize: 12,
     fontWeight: "500",
+  },
+  chevronContainer: {
+    marginLeft: 8,
   },
   centerContainer: {
     flex: 1,
