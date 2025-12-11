@@ -34,19 +34,27 @@ const Skills = () => {
 
     const init = async () => {
       try {
-        // Try cache first for instant load
+        // Try cache first for instant load (even if empty)
         const cached = await AsyncStorage.getItem("skillCourses");
         if (cached && isMounted) {
           const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) {
+          if (Array.isArray(parsed)) {
             setSkills(parsed);
             setLoading(false);
+            // Cache exists, try to refresh in background (but don't block UI)
+            // Only fetch if we have network connectivity
+            fetchSkills(false, isMounted).catch(() => {
+              // Silently fail if offline - we already have cached data
+            });
+            return;
           }
         }
       } catch (e) {
         console.log("Error reading cached skill courses:", e);
-      } finally {
-        // Always attempt a background refresh
+      }
+      
+      // Only fetch if cache doesn't exist
+      if (isMounted) {
         fetchSkills(false, isMounted);
       }
     };
@@ -80,7 +88,32 @@ const Skills = () => {
       }
     } catch (err) {
       console.error("Error fetching skills:", err);
-      setError("Failed to load skills. Please try again.");
+      // If network fails, try to use cached data (even if empty)
+      if (!isRefreshing) {
+        try {
+          const cached = await AsyncStorage.getItem("skillCourses");
+          if (cached && isMountedFlag) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed)) {
+              setSkills(parsed);
+              // Only show error if cache is also empty
+              if (parsed.length === 0) {
+                setError("Failed to load skills. Please check your connection.");
+              }
+            } else {
+              setError("Failed to load skills. Please try again.");
+            }
+          } else {
+            setError("Failed to load skills. Please check your connection.");
+          }
+        } catch (e) {
+          console.log("Error reading cached skill courses on error:", e);
+          setError("Failed to load skills. Please check your connection.");
+        }
+      } else {
+        // If refreshing and fails, don't show error - keep existing data
+        setError(null);
+      }
     } finally {
       if (!isRefreshing) {
         setLoading(false);

@@ -27,7 +27,7 @@ export default function DepartmentSelect() {
   const fetchDepartments = async (isRefreshing = false) => {
     try {
       if (!isRefreshing) {
-        setIsLoading(true);
+      setIsLoading(true);
       }
       setError(null);
 
@@ -78,7 +78,7 @@ export default function DepartmentSelect() {
           setError("Failed to load departments. Please try again.");
         }
       } catch (e) {
-        setError("Failed to load departments. Please try again.");
+      setError("Failed to load departments. Please try again.");
       }
     } finally {
       setIsLoading(false);

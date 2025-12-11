@@ -1,180 +1,171 @@
 import React, { useState, useMemo } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Image, ScrollView, ActivityIndicator, RefreshControl } from "react-native";
-import { useRouter } from "expo-router";
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  TextInput,
+  Image,
+  ActivityIndicator,
+  RefreshControl,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { libraryAPI } from "../utils/api";
+import { useRouter } from "expo-router";
+import { libraryAPI, resolveAssetUrl } from "../utils/api";
 import { useOptimizedFetch } from "../utils/useOptimizedFetch";
-import { resolveAssetUrl } from "../utils/api";
 
 export default function LibraryScreen() {
   const router = useRouter();
-  const [selectedCategory, setSelectedCategory] = useState("All");
   const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("All");
 
-  // Fetch books from backend
-  const { data: booksData, isLoading, error, refreshing, refresh } = useOptimizedFetch(
+  // -- Fetch books from backend (defensive: default to empty array) --
+  const {
+    data: rawData,
+    isLoading,
+    refreshing,
+    refresh,
+    error,
+  } = useOptimizedFetch(
     async (signal) => {
       const filters = {};
-      if (selectedCategory !== "All") {
-        filters.category = selectedCategory;
-      }
-      if (search.trim()) {
-        filters.query = search.trim();
-      }
-      const response = await libraryAPI.getAll(filters, signal);
-      return response.success ? response.data : [];
+      if (category !== "All") filters.category = category;
+      if (search.trim()) filters.query = search.trim();
+
+      const resp = await libraryAPI.getAll(filters, signal);
+      return resp.success ? resp.data : [];
     },
-    [selectedCategory, search],
-    { cacheDuration: 10 * 60 * 1000 } // 10 minutes cache
+    [category, search],
+    { cacheDuration: 10 * 60 * 1000 }
   );
 
-  const books = booksData || [];
+  // Ensure books is always an array (guards against null)
+  const books = Array.isArray(rawData) ? rawData : [];
 
-  // Extract unique categories from books
+  // -- Categories derived safely from books --
   const categories = useMemo(() => {
-    const cats = new Set(books.map((book) => book.category || "General"));
-    return ["All", ...Array.from(cats).sort()];
+    const set = new Set((books || []).map((b) => b?.category || "General"));
+    return ["All", ...Array.from(set).sort()];
   }, [books]);
 
-  const filteredBooks = useMemo(() => {
-    return books.filter((book) => {
-      const matchCategory = selectedCategory === "All" || (book.category || "General") === selectedCategory;
-      const matchSearch =
-        !search.trim() ||
-        book.title?.toLowerCase().includes(search.toLowerCase()) ||
-        book.author?.toLowerCase().includes(search.toLowerCase()) ||
-        book.description?.toLowerCase().includes(search.toLowerCase());
-      return matchCategory && matchSearch;
-    });
-  }, [books, selectedCategory, search]);
+  // -- Filter results safely --
+  const results = useMemo(() => {
+    const q = (search || "").toLowerCase().trim();
+    return (books || []).filter((b) => {
+      const title = (b?.title || "").toLowerCase();
+      const author = (b?.author || "").toLowerCase();
+      const description = (b?.description || "").toLowerCase();
 
-  const renderBookCard = ({ item }) => (
+      const matchSearch =
+        !q ||
+        title.includes(q) ||
+        author.includes(q) ||
+        description.includes(q);
+
+      const matchCategory = category === "All" || (b?.category || "General") === category;
+
+      return matchSearch && matchCategory;
+    });
+  }, [books, search, category]);
+
+  // -- Render a book card --
+  const renderBook = ({ item }) => (
     <TouchableOpacity
       style={styles.card}
+      activeOpacity={0.88}
       onPress={() => router.push(`/library/${item._id}`)}
-      activeOpacity={0.8}
     >
-      <View style={styles.thumbnailContainer}>
-        {item.thumbnail?.url ? (
-          <Image 
-            source={{ uri: resolveAssetUrl(item.thumbnail.url) }} 
-            style={styles.thumbnail}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
-            <Ionicons name="book" size={40} color="#94A3B8" />
-          </View>
-        )}
-      </View>
-      <View style={styles.bookInfo}>
-        <Text style={styles.bookTitle} numberOfLines={2}>{item.title}</Text>
-        <View style={styles.authorRow}>
-          <Ionicons name="person-outline" size={14} color="#64748B" />
-          <Text style={styles.bookAuthor} numberOfLines={1}>{item.author || "Unknown Author"}</Text>
+      {item?.thumbnail?.url ? (
+        <Image source={{ uri: resolveAssetUrl(item.thumbnail.url) }} style={styles.thumb} />
+      ) : (
+        <View style={styles.thumbPlaceholder}>
+          <Ionicons name="book" size={36} color="#9AA7B2" />
         </View>
+      )}
+
+      <View style={styles.info}>
+        <Text numberOfLines={2} style={styles.title}>
+          {item?.title || "Untitled"}
+        </Text>
+
+        <Text numberOfLines={1} style={styles.author}>
+          {item?.author || "Unknown Author"}
+        </Text>
+
         <View style={styles.metaRow}>
-          <View style={styles.categoryLabel}>
-            <Ionicons name="pricetag" size={12} color="#3498DB" />
-            <Text style={styles.categoryText}>{item.category || "General"}</Text>
+          <View style={styles.catBadge}>
+            <Ionicons name="pricetag" size={12} color="#2563EB" />
+            <Text style={styles.catText}>{item?.category || "General"}</Text>
           </View>
-          {item.publishedDate && (
-            <View style={styles.dateContainer}>
+
+          {item?.publishedDate ? (
+            <View style={styles.dateRow}>
               <Ionicons name="calendar-outline" size={12} color="#94A3B8" />
-              <Text style={styles.publishedDate}>{item.publishedDate}</Text>
+              <Text style={styles.dateText}>{item.publishedDate}</Text>
             </View>
-          )}
+          ) : null}
         </View>
       </View>
-      <View style={styles.chevronContainer}>
-        <Ionicons name="chevron-forward" size={22} color="#3498DB" />
-      </View>
+
+      <Ionicons name="chevron-forward" size={22} color="#2563EB" />
     </TouchableOpacity>
   );
 
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.headerContainer}>
-        <Text style={styles.header}>Digital Library</Text>
-        <Text style={styles.subheader}>Explore our collection of books</Text>
-      </View>
+      <Text style={styles.header}>Library</Text>
+      <Text style={styles.sub}>Discover books, articles and guides</Text>
 
-      {/* Search Bar */}
-      <View style={styles.searchRow}>
-        <Ionicons name="search" size={20} color="#64748B" />
+      {/* Search */}
+      <View style={styles.searchBox}>
+        <Ionicons name="search" size={18} color="#6B7280" />
         <TextInput
-          placeholder="Search books by title, author..."
+          placeholder="Search by title, author or description..."
           placeholderTextColor="#94A3B8"
           style={styles.searchInput}
           value={search}
           onChangeText={setSearch}
+          returnKeyType="search"
         />
         {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch("")} style={styles.clearButton}>
-            <Ionicons name="close-circle" size={20} color="#64748B" />
+          <TouchableOpacity onPress={() => setSearch("")} style={styles.clearBtn}>
+            <Ionicons name="close-circle" size={18} color="#94A3B8" />
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Categories */}
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false} 
-        style={styles.categoryRow}
-        contentContainerStyle={styles.categoryRowContent}
-      >
-        {categories.map((cat) => {
-          const active = selectedCategory === cat;
-          return (
-            <TouchableOpacity
-              key={cat}
-              style={[styles.categoryChip, active ? styles.chipActive : styles.chipInactive]}
-              onPress={() => setSelectedCategory(cat)}
-            >
-              <Text style={active ? styles.chipTextActive : styles.chipText}>{cat}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
-      {/* Books List */}
-      {isLoading && !books.length ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#3498DB" />
+      {/* States: loading / error / empty / list */}
+      {isLoading && books.length === 0 ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#2563EB" />
           <Text style={styles.loadingText}>Loading books...</Text>
         </View>
-      ) : error && !books.length ? (
-        <View style={styles.centerContainer}>
+      ) : error ? (
+        <View style={styles.center}>
           <Ionicons name="alert-circle-outline" size={64} color="#EF4444" />
           <Text style={styles.errorText}>Failed to load books</Text>
-          <Text style={styles.errorSubtext}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={refresh}>
-            <Text style={styles.retryButtonText}>Retry</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={refresh}>
+            <Text style={styles.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      ) : filteredBooks.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <Ionicons name="library-outline" size={64} color="#94A3B8" />
-          <Text style={styles.emptyText}>No books found</Text>
-          <Text style={styles.emptySubtext}>
-            {search.trim() || selectedCategory !== "All"
-              ? "Try adjusting your search or filters"
-              : "Check back later for new books"}
-          </Text>
+      ) : results.length === 0 ? (
+        <View style={styles.center}>
+          <Ionicons name="library-outline" size={64} color="#9AA7B2" />
+          <Text style={styles.emptyText}>No books match your search</Text>
+          <Text style={styles.emptySub}>Try a different keyword or category</Text>
         </View>
       ) : (
         <FlatList
-          data={filteredBooks}
-          keyExtractor={(item) => item._id}
-          renderItem={renderBookCard}
+          data={results}
+          keyExtractor={(b) => b?._id ?? Math.random().toString()}
+          renderItem={renderBook}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#2563EB" />}
           contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#3498DB" />
-          }
           ListHeaderComponent={
             <Text style={styles.resultsCount}>
-              {filteredBooks.length} {filteredBooks.length === 1 ? "book" : "books"} found
+              {results.length} {results.length === 1 ? "book" : "books"} found
             </Text>
           }
         />
@@ -183,229 +174,186 @@ export default function LibraryScreen() {
   );
 }
 
+/* ======================= STYLES ======================= */
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F8FAFC",
-    paddingHorizontal: 16,
+    padding: 16,
   },
-  headerContainer: {
-    marginTop: 20,
-    marginBottom: 20,
-  },
+
   header: {
-    fontSize: 32,
-    fontWeight: "700",
-    color: "#1E293B",
-    marginBottom: 4,
+    fontSize: 30,
+    fontWeight: "800",
+    color: "#0F172A",
   },
-  subheader: {
+  sub: {
     fontSize: 14,
-    color: "#64748B",
-    fontWeight: "500",
+    color: "#6B7280",
+    marginBottom: 14,
   },
-  searchRow: {
+
+  searchBox: {
     flexDirection: "row",
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
     alignItems: "center",
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#E6EEF6",
+    marginBottom: 12,
   },
   searchInput: {
-    marginLeft: 10,
-    fontSize: 16,
     flex: 1,
-    color: "#1E293B",
+    marginLeft: 10,
+    fontSize: 15,
+    color: "#0F172A",
   },
-  clearButton: {
-    padding: 4,
+  clearBtn: {
+    marginLeft: 8,
   },
-  categoryRow: {
-    marginBottom: 16,
-  },
-  categoryRowContent: {
-    paddingRight: 16,
-  },
-  categoryChip: {
-    paddingHorizontal: 20,
+
+  chipsContainer: {
     paddingVertical: 10,
+    paddingBottom: 6,
+    marginBottom: 8,
+  },
+  chip: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 20,
     marginRight: 10,
+    borderWidth: 1,
+    borderColor: "#E6EEF6",
   },
   chipActive: {
-    backgroundColor: "#3498DB",
-  },
-  chipInactive: {
-    backgroundColor: "#fff",
-    borderWidth: 1.5,
-    borderColor: "#E2E8F0",
+    backgroundColor: "#2563EB",
+    borderColor: "#2563EB",
   },
   chipText: {
-    color: "#64748B",
+    color: "#334155",
     fontWeight: "600",
-    fontSize: 14,
+    fontSize: 13,
   },
   chipTextActive: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 14,
+    color: "#ffffff",
   },
+
   listContent: {
     paddingBottom: 120,
+    paddingTop: 6,
   },
   resultsCount: {
-    fontSize: 14,
-    color: "#64748B",
-    marginBottom: 12,
-    fontWeight: "500",
+    color: "#475569",
+    marginBottom: 10,
+    fontWeight: "600",
   },
+
   card: {
     flexDirection: "row",
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
     alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    padding: 14,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    borderColor: "#E6EEF6",
+    marginBottom: 12,
   },
-  thumbnailContainer: {
-    marginRight: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+  thumb: {
+    width: 72,
+    height: 106,
+    borderRadius: 8,
+    backgroundColor: "#EDF2F7",
+    marginRight: 12,
   },
-  thumbnail: {
-    width: 80,
-    height: 120,
-    borderRadius: 10,
-    backgroundColor: "#F1F5F9",
-  },
-  thumbnailPlaceholder: {
+  thumbPlaceholder: {
+    width: 72,
+    height: 106,
+    borderRadius: 8,
+    backgroundColor: "#EEF2F6",
+    marginRight: 12,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#F1F5F9",
   },
-  bookInfo: {
+  info: {
     flex: 1,
   },
-  bookTitle: {
-    fontSize: 18,
+  title: {
+    fontSize: 16,
     fontWeight: "700",
-    color: "#1E293B",
-    marginBottom: 6,
-    lineHeight: 24,
+    color: "#0F172A",
+    marginBottom: 4,
   },
-  authorRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 10,
-    gap: 6,
-  },
-  bookAuthor: {
-    color: "#64748B",
-    fontSize: 14,
-    fontWeight: "500",
-    flex: 1,
+  author: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginBottom: 8,
   },
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    flexWrap: "wrap",
-    gap: 10,
+    gap: 8,
   },
-  categoryLabel: {
-    backgroundColor: "#ECF5FF",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+  catBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    backgroundColor: "#F0F8FF",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginRight: 8,
   },
-  categoryText: {
-    color: "#3498DB",
-    fontWeight: "600",
+  catText: {
+    color: "#2563EB",
     fontSize: 12,
+    marginLeft: 6,
   },
-  dateContainer: {
+  dateRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
   },
-  publishedDate: {
+  dateText: {
     color: "#94A3B8",
     fontSize: 12,
-    fontWeight: "500",
+    marginLeft: 6,
   },
-  chevronContainer: {
-    marginLeft: 8,
-  },
-  centerContainer: {
+
+  center: {
     flex: 1,
-    justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 60,
-    paddingHorizontal: 32,
+    marginTop: 28,
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: "#64748B",
-    fontWeight: "500",
-  },
-  errorText: {
-    marginTop: 16,
-    fontSize: 18,
-    color: "#EF4444",
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  errorSubtext: {
-    marginTop: 8,
-    fontSize: 14,
-    color: "#64748B",
-    textAlign: "center",
-  },
-  retryButton: {
-    marginTop: 20,
-    backgroundColor: "#3498DB",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: 16,
+    marginTop: 10,
+    color: "#6B7280",
   },
   emptyText: {
-    marginTop: 16,
-    fontSize: 20,
-    color: "#1E293B",
-    fontWeight: "600",
-    textAlign: "center",
+    marginTop: 12,
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#334155",
   },
-  emptySubtext: {
-    marginTop: 8,
-    fontSize: 14,
-    color: "#64748B",
-    textAlign: "center",
+  emptySub: {
+    marginTop: 6,
+    color: "#6B7280",
+  },
+  errorText: {
+    marginTop: 10,
+    color: "#EF4444",
+    fontSize: 16,
+  },
+  retryBtn: {
+    marginTop: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#2563EB",
+  },
+  retryText: {
+    color: "#fff",
+    fontWeight: "700",
   },
 });

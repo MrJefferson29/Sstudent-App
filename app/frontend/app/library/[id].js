@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, ActivityIndicator, Platform } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  Platform,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { libraryAPI, resolveAssetUrl } from "../utils/api";
@@ -21,7 +30,6 @@ export default function BookDetail() {
       setLoading(true);
       setError(null);
 
-      // Try to load from cache first
       const cacheKey = `book_${id}`;
       const cached = await AsyncStorage.getItem(cacheKey);
       if (cached) {
@@ -30,33 +38,25 @@ export default function BookDetail() {
         setLoading(false);
       }
 
-      // Fetch from API
       const response = await libraryAPI.getById(id);
       if (response.success && response.data) {
         setBook(response.data);
-        // Cache the book data
         await AsyncStorage.setItem(cacheKey, JSON.stringify(response.data));
       } else {
         throw new Error("Book not found");
       }
     } catch (err) {
-      console.error("Fetch book error:", err);
-      setError(err.response?.data?.message || err.message || "Failed to load book details");
+      setError(err.message || "Failed to load book");
     } finally {
       setLoading(false);
     }
   };
 
   const handleOpenPDF = () => {
-    if (!book?.pdfUrl) {
-      return;
-    }
+    if (!book?.pdfUrl) return;
     router.push({
       pathname: "/pdf-viewer",
-      params: {
-        pdfUrl: book.pdfUrl,
-        title: book.title,
-      },
+      params: { pdfUrl: book.pdfUrl, title: book.title },
     });
   };
 
@@ -72,11 +72,13 @@ export default function BookDetail() {
   if (error || !book) {
     return (
       <View style={styles.centerContainer}>
-        <Ionicons name="alert-circle-outline" size={64} color="#EF4444" />
-        <Text style={styles.errorText}>{error || "Book not found"}</Text>
+        <Ionicons name="alert-circle-outline" size={60} color="#EF4444" />
+        <Text style={styles.errorText}>{error}</Text>
+
         <TouchableOpacity style={styles.retryButton} onPress={fetchBookDetails}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
+
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
@@ -86,74 +88,69 @@ export default function BookDetail() {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Header with back button */}
+      {/* HEADER */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerIcon}>
           <Ionicons name="arrow-back" size={24} color="#1E293B" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>Book Details</Text>
-        <View style={styles.backBtn} />
+
+        <Text style={styles.headerTitle}>Book Details</Text>
+
+        <View style={styles.headerIcon} />
       </View>
 
-      {/* Book Cover/Thumbnail */}
-      <View style={styles.coverContainer}>
-        {book.thumbnail?.url ? (
-          <Image
-            source={{ uri: resolveAssetUrl(book.thumbnail.url) }}
-            style={styles.cover}
-            resizeMode="contain"
-          />
-        ) : (
-          <View style={[styles.cover, styles.coverPlaceholder]}>
-            <Ionicons name="book" size={64} color="#94A3B8" />
-          </View>
-        )}
+      {/* BOOK COVER */}
+      <View style={styles.coverWrapper}>
+        <View style={styles.coverCard}>
+          {book.thumbnail?.url ? (
+            <Image
+              source={{ uri: resolveAssetUrl(book.thumbnail.url) }}
+              style={styles.coverImage}
+            />
+          ) : (
+            <View style={styles.coverPlaceholder}>
+              <Ionicons name="book" size={70} color="#A7B1C5" />
+            </View>
+          )}
+        </View>
       </View>
 
-      {/* Book Info */}
-      <View style={styles.infoContainer}>
-        <Text style={styles.title}>{book.title}</Text>
-        <Text style={styles.author}>By {book.author || "Unknown Author"}</Text>
+      {/* CONTENT */}
+      <View style={styles.contentSection}>
+        <Text style={styles.bookTitle}>{book.title}</Text>
+        <Text style={styles.bookAuthor}>By {book.author || "Unknown Author"}</Text>
 
-        <View style={styles.metaContainer}>
-          <View style={styles.categoryBadge}>
-            <Ionicons name="pricetag" size={14} color="#3498DB" />
-            <Text style={styles.categoryText}>{book.category || "General"}</Text>
+        <View style={styles.tagRow}>
+          <View style={styles.tag}>
+            <Ionicons name="pricetag-outline" size={14} color="#3498DB" />
+            <Text style={styles.tagText}>{book.category || "General"}</Text>
           </View>
+
           {book.publishedDate && (
-            <View style={styles.dateBadge}>
-              <Ionicons name="calendar" size={14} color="#64748B" />
-              <Text style={styles.dateText}>{book.publishedDate}</Text>
+            <View style={styles.tagLight}>
+              <Ionicons name="calendar-outline" size={14} color="#64748B" />
+              <Text style={styles.tagLightText}>{book.publishedDate}</Text>
             </View>
           )}
         </View>
 
-        {/* Description */}
         {book.description && (
-          <View style={styles.section}>
-            <Text style={styles.sectionHeader}>Description</Text>
-            <Text style={styles.description}>{book.description}</Text>
+          <View style={styles.descriptionBlock}>
+            <Text style={styles.sectionTitle}>Description</Text>
+            <Text style={styles.descriptionText}>{book.description}</Text>
           </View>
         )}
 
-        {/* Actions */}
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={handleOpenPDF}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="document-text" size={24} color="#fff" />
-            <Text style={styles.primaryButtonText}>Read PDF</Text>
+        {/* ACTION BUTTONS */}
+        <View style={styles.actionRow}>
+          <TouchableOpacity style={styles.btnPrimary} onPress={handleOpenPDF}>
+            <Ionicons name="document-text-outline" size={22} color="#fff" />
+            <Text style={styles.btnPrimaryText}>Read PDF</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => router.back()}
-            activeOpacity={0.8}
-          >
+          <TouchableOpacity style={styles.btnSecondary} onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={20} color="#64748B" />
-            <Text style={styles.secondaryButtonText}>Back to Library</Text>
+            <Text style={styles.btnSecondaryText}>Back to Library</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -161,205 +158,217 @@ export default function BookDetail() {
   );
 }
 
+/* ======================= STYLES ========================== */
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F8FAFC",
   },
+
+  /* HEADER */
   header: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === "ios" ? 50 : 20,
+    backgroundColor: "#FFFFFF",
+    paddingTop: Platform.OS === "ios" ? 55 : 20,
     paddingBottom: 16,
-    backgroundColor: "#fff",
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
+    borderBottomColor: "#E5EAF1",
+    elevation: 2,
   },
-  backBtn: {
+  headerIcon: {
     width: 40,
-    height: 40,
-    justifyContent: "center",
     alignItems: "center",
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1E293B",
     flex: 1,
     textAlign: "center",
-  },
-  coverContainer: {
-    alignItems: "center",
-    paddingVertical: 24,
-    backgroundColor: "#fff",
-    marginBottom: 16,
-  },
-  cover: {
-    width: 200,
-    height: 300,
-    borderRadius: 12,
-    backgroundColor: "#F1F5F9",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  coverPlaceholder: {
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#F1F5F9",
-  },
-  infoContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#1E293B",
-    marginBottom: 8,
-    lineHeight: 36,
-  },
-  author: {
-    fontSize: 18,
-    color: "#64748B",
-    marginBottom: 16,
-    fontWeight: "500",
-  },
-  metaContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    marginBottom: 24,
-  },
-  categoryBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#ECF5FF",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    gap: 6,
-  },
-  categoryText: {
-    color: "#3498DB",
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  dateBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F1F5F9",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    gap: 6,
-  },
-  dateText: {
-    color: "#64748B",
-    fontWeight: "500",
-    fontSize: 14,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
     fontSize: 20,
     fontWeight: "700",
     color: "#1E293B",
-    marginBottom: 12,
   },
-  description: {
-    fontSize: 16,
-    color: "#475569",
-    lineHeight: 24,
+
+  /* COVER */
+  coverWrapper: {
+    alignItems: "center",
+    marginTop: 20,
   },
-  actionsContainer: {
-    marginTop: 8,
+  coverCard: {
+    width: '100%',
+    height: 330,
+    borderRadius: 1,
+    backgroundColor: "#FFFFFF",
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  coverImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 1,
+  },
+  coverPlaceholder: {
+    flex: 1,
+    borderRadius: 16,
+    backgroundColor: "#E8EDF4",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  /* CONTENT */
+  contentSection: {
+    paddingHorizontal: 20,
+    paddingTop: 30,
+    paddingBottom: 40,
+  },
+  bookTitle: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#1E293B",
+    marginBottom: 6,
+  },
+  bookAuthor: {
+    fontSize: 18,
+    fontWeight: "500",
+    color: "#64748B",
+    marginBottom: 20,
+  },
+
+  /* TAGS */
+  tagRow: {
+    flexDirection: "row",
     gap: 12,
+    marginBottom: 28,
   },
-  primaryButton: {
+  tag: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ECF5FF",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 6,
+  },
+  tagText: {
+    color: "#3498DB",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  tagLight: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F1F5F9",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 6,
+  },
+  tagLightText: {
+    color: "#64748B",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+
+  /* DESCRIPTION */
+  descriptionBlock: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1E293B",
+    marginBottom: 10,
+  },
+  descriptionText: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: "#475569",
+  },
+
+  /* ACTION BUTTONS */
+  actionRow: {
+    gap: 14,
+  },
+  btnPrimary: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#3498DB",
+    borderRadius: 14,
     paddingVertical: 16,
-    borderRadius: 12,
     gap: 10,
-    shadowColor: "#3498DB",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
     elevation: 4,
+    shadowColor: "#3498DB",
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
   },
-  primaryButtonText: {
-    color: "#fff",
+  btnPrimaryText: {
     fontSize: 18,
     fontWeight: "700",
+    color: "#fff",
   },
-  secondaryButton: {
+  btnSecondary: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#fff",
     paddingVertical: 14,
+    backgroundColor: "#fff",
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: "#E2E8F0",
     gap: 8,
   },
-  secondaryButtonText: {
+  btnSecondaryText: {
     color: "#64748B",
     fontSize: 16,
     fontWeight: "600",
   },
+
+  /* STATES */
   centerContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 32,
-    backgroundColor: "#F8FAFC",
+    paddingHorizontal: 30,
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
+    marginTop: 10,
     color: "#64748B",
-    fontWeight: "500",
+    fontSize: 16,
   },
   errorText: {
-    marginTop: 16,
+    textAlign: "center",
     fontSize: 18,
     color: "#EF4444",
+    marginVertical: 20,
     fontWeight: "600",
-    textAlign: "center",
-    marginBottom: 24,
   },
   retryButton: {
     backgroundColor: "#3498DB",
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 10,
     marginBottom: 12,
   },
   retryButtonText: {
     color: "#fff",
-    fontWeight: "600",
+    fontWeight: "700",
     fontSize: 16,
   },
   backButton: {
-    backgroundColor: "#fff",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
     borderWidth: 1,
     borderColor: "#E2E8F0",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
   backButtonText: {
-    color: "#64748B",
-    fontWeight: "600",
+    color: "#475569",
     fontSize: 16,
+    fontWeight: "600",
   },
 });

@@ -105,7 +105,7 @@ const LiveStreamScreen = () => {
             setError(err.response?.data?.message || 'Unable to load session');
           }
         } catch (e) {
-          setError(err.response?.data?.message || 'Unable to load session');
+        setError(err.response?.data?.message || 'Unable to load session');
         }
       } finally {
         setLoading(false);

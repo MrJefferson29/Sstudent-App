@@ -41,24 +41,44 @@ const VideoDetails = () => {
 
   useEffect(() => {
     const fetchVideoDetails = async () => {
+      const cacheKey = `videoDetails_${id}`;
+
+      // Try cache first for instant load
       try {
-        const cacheKey = `videoDetails_${id}`;
-
-        // Try cache first for instant load
-        try {
-          const cached = await AsyncStorage.getItem(cacheKey);
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            if (parsed) {
-              setVideoDetails(parsed);
-              setLoading(false);
-            }
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed) {
+            setVideoDetails(parsed);
+            setLoading(false);
+            // Cache exists, try to refresh in background (but don't block UI)
+            // Only fetch if we have network connectivity
+            (async () => {
+              try {
+                const response = await axios.get(`${REMOTE_API_URL}/courses/video/${id}`);
+                const data = response.data.data;
+                setVideoDetails(data);
+                
+                // Cache the data
+                try {
+                  await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
+                } catch (e) {
+                  console.log('Error caching video details:', e);
+                }
+              } catch (error) {
+                // Silently fail if offline - we already have cached data
+                console.log('Background video refresh failed (offline?):', error);
+              }
+            })();
+            return;
           }
-        } catch (e) {
-          console.log('Error reading cached video details:', e);
         }
+      } catch (e) {
+        console.log('Error reading cached video details:', e);
+      }
 
-        // Fetch from network
+      // Only fetch if cache doesn't exist
+      try {
         const response = await axios.get(`${REMOTE_API_URL}/courses/video/${id}`);
         const data = response.data.data;
         setVideoDetails(data);
@@ -70,8 +90,8 @@ const VideoDetails = () => {
           console.log('Error caching video details:', e);
         }
       } catch (error) {
+        console.error('Error fetching video details:', error);
         // If network fails, try to use cached data
-        const cacheKey = `videoDetails_${id}`;
         try {
           const cached = await AsyncStorage.getItem(cacheKey);
           if (cached) {
@@ -79,13 +99,13 @@ const VideoDetails = () => {
             if (parsed) {
               setVideoDetails(parsed);
             } else {
-              Alert.alert('Error', 'Failed to load video details.');
+              Alert.alert('Error', 'Failed to load video details. Please check your connection.');
             }
           } else {
-            Alert.alert('Error', 'Failed to load video details.');
+            Alert.alert('Error', 'Failed to load video details. Please check your connection.');
           }
         } catch (e) {
-          Alert.alert('Error', 'Failed to load video details.');
+          Alert.alert('Error', 'Failed to load video details. Please check your connection.');
         }
       } finally {
         setLoading(false);
@@ -97,25 +117,47 @@ const VideoDetails = () => {
   useEffect(() => {
     let isMounted = true;
     const loadChat = async () => {
+      const cacheKey = `videoChat_${id}`;
+
+      // Try cache first for instant load (even if empty)
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached && isMounted) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Array.isArray(parsed)) {
+            setChatMessages(parsed);
+            setChatLoading(false);
+            // Cache exists, try to refresh in background (but don't block UI)
+            // Only fetch if we have network connectivity
+            (async () => {
+              try {
+                const response = await chatAPI.getMessages('video', id);
+                if (isMounted && response.success) {
+                  const data = response.data || [];
+                  setChatMessages(data);
+                  
+                  // Cache the messages
+                  try {
+                    await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
+                  } catch (e) {
+                    console.log('Error caching chat messages:', e);
+                  }
+                }
+              } catch (error) {
+                // Silently fail if offline - we already have cached data
+                console.log('Background chat refresh failed (offline?):', error);
+              }
+            })();
+            return;
+          }
+        }
+      } catch (e) {
+        console.log('Error reading cached chat:', e);
+      }
+
+      // Only fetch if cache doesn't exist
       try {
         setChatLoading(true);
-        const cacheKey = `videoChat_${id}`;
-
-        // Try cache first for instant load
-        try {
-          const cached = await AsyncStorage.getItem(cacheKey);
-          if (cached && isMounted) {
-            const parsed = JSON.parse(cached);
-            if (parsed && Array.isArray(parsed)) {
-              setChatMessages(parsed);
-              setChatLoading(false);
-            }
-          }
-        } catch (e) {
-          console.log('Error reading cached chat:', e);
-        }
-
-        // Fetch from network
         const response = await chatAPI.getMessages('video', id);
         if (isMounted && response.success) {
           const data = response.data || [];
@@ -130,8 +172,7 @@ const VideoDetails = () => {
         }
       } catch (error) {
         console.error('Failed to fetch video chat:', error);
-        // If network fails, try to use cached data
-        const cacheKey = `videoChat_${id}`;
+        // If network fails, try to use cached data (even if empty)
         try {
           const cached = await AsyncStorage.getItem(cacheKey);
           if (cached && isMounted) {

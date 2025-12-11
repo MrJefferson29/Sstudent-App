@@ -27,7 +27,7 @@ export default function SchoolSelect() {
   const fetchData = async (tab = activeTab, isRefreshing = false) => {
     try {
       if (!isRefreshing) {
-        setIsLoading(true);
+      setIsLoading(true);
       }
       setError(null);
 
@@ -138,7 +138,7 @@ export default function SchoolSelect() {
           setError("Failed to load data. Please try again later.");
         }
       } else {
-        setError("Failed to load data. Please try again later.");
+      setError("Failed to load data. Please try again later.");
       }
     } finally {
       setIsLoading(false);

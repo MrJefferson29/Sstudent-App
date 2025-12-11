@@ -17,6 +17,7 @@ import { Video } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { io } from 'socket.io-client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../Contexts/AuthContext';
 import { API_URL as BACKEND_API_URL, chatAPI } from '../utils/api';
 
@@ -43,20 +44,116 @@ const ChapterList = () => {
   const roomId = `course:${id}`;
 
   useEffect(() => {
-    fetchChapters();
+    let isMounted = true;
+    
+    const loadChapters = async () => {
+      const cacheKey = `chapters_${id}`;
+      
+      // Try cache first for instant load (even if empty)
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached && isMounted) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Array.isArray(parsed)) {
+            setChapters(parsed);
+            setLoading(false);
+            // Cache exists, try to refresh in background (but don't block UI)
+            // Only fetch if we have network connectivity
+            fetchChapters().catch(() => {
+              // Silently fail if offline - we already have cached data
+            });
+            return;
+          }
+        }
+      } catch (e) {
+        console.log('Error reading cached chapters:', e);
+      }
+      
+      // Only fetch if cache doesn't exist
+      if (isMounted) {
+        fetchChapters();
+      }
+    };
+    
+    loadChapters();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [id]);
 
   useEffect(() => {
     let isMounted = true;
     const loadHistory = async () => {
+      const cacheKey = `courseChat_${id}`;
+      
+      // Try cache first for instant load (even if empty)
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached && isMounted) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Array.isArray(parsed)) {
+            setChatMessages(parsed);
+            setChatLoading(false);
+            // Cache exists, try to refresh in background (but don't block UI)
+            // Only fetch if we have network connectivity
+            (async () => {
+              try {
+                const response = await chatAPI.getMessages('course', id);
+                if (isMounted && response.success) {
+                  const data = response.data || [];
+                  setChatMessages(data);
+                  
+                  // Cache the messages
+                  try {
+                    await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
+                  } catch (e) {
+                    console.log('Error caching chat messages:', e);
+                  }
+                }
+              } catch (err) {
+                // Silently fail if offline - we already have cached data
+                console.log('Background chat refresh failed (offline?):', err);
+              }
+            })();
+            return;
+          }
+        }
+      } catch (e) {
+        console.log('Error reading cached chat:', e);
+      }
+      
+      // Only fetch if cache doesn't exist
       try {
         setChatLoading(true);
         const response = await chatAPI.getMessages('course', id);
         if (isMounted && response.success) {
-          setChatMessages(response.data || []);
+          const data = response.data || [];
+          setChatMessages(data);
+          
+          // Cache the messages
+          try {
+            await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
+          } catch (e) {
+            console.log('Error caching chat messages:', e);
+          }
         }
       } catch (err) {
         console.error('Error fetching course chat:', err);
+        // If network fails, try to use cached data (even if empty)
+        if (isMounted) {
+          try {
+            const cached = await AsyncStorage.getItem(cacheKey);
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              if (parsed && Array.isArray(parsed)) {
+                setChatMessages(parsed);
+              }
+            }
+          } catch (e) {
+            console.log('Error reading cached chat on error:', e);
+          }
+        }
       } finally {
         if (isMounted) {
           setChatLoading(false);
@@ -82,9 +179,17 @@ const ChapterList = () => {
     socketRef.current = socket;
     socket.emit('join_chat', { room: roomId });
 
-    const handleIncoming = (message) => {
+    const handleIncoming = async (message) => {
       if (message.resourceType === 'course' && message.resourceId === id) {
-        setChatMessages((prev) => [...prev, message]);
+        setChatMessages((prev) => {
+          const updated = [...prev, message];
+          // Cache updated messages
+          const cacheKey = `courseChat_${id}`;
+          AsyncStorage.setItem(cacheKey, JSON.stringify(updated)).catch((e) => {
+            console.log('Error caching updated chat messages:', e);
+          });
+          return updated;
+        });
       }
     };
 
@@ -113,11 +218,44 @@ const ChapterList = () => {
   };
 
   const fetchChapters = async () => {
+    const cacheKey = `chapters_${id}`;
     try {
       const response = await axios.get(`${REMOTE_API_URL}/courses/all-chapters/${id}`);
-      setChapters(response.data.data);
+      const data = response.data.data || [];
+      setChapters(data);
+      setError(null); // Clear any previous errors
+      
+      // Cache the chapters
+      try {
+        await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
+      } catch (e) {
+        console.log('Error caching chapters:', e);
+      }
     } catch (err) {
-      setError('Failed to fetch chapters');
+      console.error('Error fetching chapters:', err);
+      // If network fails, try to use cached data (even if empty)
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && Array.isArray(parsed)) {
+            setChapters(parsed);
+            // Only show error if cache is also empty
+            if (parsed.length === 0) {
+              setError('Failed to fetch chapters. Please check your connection.');
+            } else {
+              setError(null); // Don't show error if we have cached data
+            }
+          } else {
+            setError('Failed to fetch chapters');
+          }
+        } else {
+          setError('Failed to fetch chapters. Please check your connection.');
+        }
+      } catch (e) {
+        console.log('Error reading cached chapters on error:', e);
+        setError('Failed to fetch chapters');
+      }
     } finally {
       setLoading(false);
     }

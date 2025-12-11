@@ -1,19 +1,62 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Image, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Image, FlatList, ActivityIndicator, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-// import Loading from '../loading';
+
+// Category list (must match addItem.js)
+const CATEGORIES = [
+  'All',
+  'Electronics',
+  'Furniture',
+  'Books',
+  'Clothing & Accessories',
+  'Sports & Outdoors',
+  'Home & Kitchen',
+  'Beauty & Personal Care',
+  'Toys & Games',
+  'Automotive',
+  'Health & Fitness',
+  'Musical Instruments',
+  'Art & Collectibles',
+  'Office Supplies',
+  'Pet Supplies',
+  'Baby & Kids',
+  'Other'
+];
 
 export default function MarketScreen() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState(""); 
-  const [filteredItems, setFilteredItems] = useState([]); 
+  const [filteredItems, setFilteredItems] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('All');
 
   const router = useRouter();
+
+  // Updated search function that filters items based on query and category
+  const applyFilters = (itemsList, query = searchQuery, category = selectedCategory) => {
+    let filtered = [...itemsList];
+
+    // Apply category filter
+    if (category && category !== 'All') {
+      filtered = filtered.filter(item => 
+        item.category && item.category.toLowerCase() === category.toLowerCase()
+      );
+    }
+
+    // Apply search query filter
+    if (query.trim() !== "") {
+      filtered = filtered.filter(item => 
+        item.name.toLowerCase().includes(query.toLowerCase()) ||
+        (item.description && item.description.toLowerCase().includes(query.toLowerCase()))
+      );
+    }
+
+    setFilteredItems(filtered);
+  };
 
   useEffect(() => {
     const fetchItems = async () => {
@@ -22,14 +65,14 @@ export default function MarketScreen() {
         if (cachedItems) {
           const parsedItems = JSON.parse(cachedItems);
           setItems(parsedItems);
-          setFilteredItems(parsedItems);
+          applyFilters(parsedItems, '', 'All');
           setLoading(false);
         }
 
         const response = await axios.get('https://ficedu.onrender.com/shop/get-all');
         const newItems = response.data.data;
         setItems(newItems);
-        setFilteredItems(newItems);
+        applyFilters(newItems, '', 'All');
         await AsyncStorage.setItem('shopItems', JSON.stringify(newItems));
       } catch (err) {
         setError('Failed to fetch items');
@@ -41,18 +84,17 @@ export default function MarketScreen() {
     fetchItems();
   }, []);
 
-  // Updated search function that filters items based solely on the query.
+  // Update filtered items when items, search query, or category changes
+  useEffect(() => {
+    applyFilters(items, searchQuery, selectedCategory);
+  }, [items, searchQuery, selectedCategory]);
+
   const handleSearch = (query) => {
     setSearchQuery(query);
-    if (query.trim() === "") {
-      setFilteredItems(items);
-    } else {
-      const filtered = items.filter(item => 
-        item.name.toLowerCase().includes(query.toLowerCase()) ||
-        (item.description && item.description.toLowerCase().includes(query.toLowerCase()))
-      );
-      setFilteredItems(filtered);
-    }
+  };
+
+  const handleCategoryFilter = (category) => {
+    setSelectedCategory(category);
   };
 
   if (loading) {
@@ -90,6 +132,30 @@ export default function MarketScreen() {
         </View>
       </View>
       <View style={styles.filter}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.categoryScroll}
+          contentContainerStyle={styles.categoryContainer}
+        >
+          {CATEGORIES.map((cat) => (
+            <TouchableOpacity
+              key={cat}
+              style={[
+                styles.categoryChip,
+                selectedCategory === cat && styles.categoryChipActive
+              ]}
+              onPress={() => handleCategoryFilter(cat)}
+            >
+              <Text style={[
+                styles.categoryChipText,
+                selectedCategory === cat && styles.categoryChipTextActive
+              ]}>
+                {cat}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
         <TouchableOpacity style={styles.addItem} onPress={handleAddItem}>
           <Ionicons name="add-sharp" size={20} color={'white'} />
           <Text style={{ color: 'white' }}> Add Item </Text>
@@ -178,9 +244,37 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   filter: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginVertical: 20,
+    marginVertical: 15,
+    paddingHorizontal: 10,
+  },
+  categoryScroll: {
+    marginBottom: 10,
+  },
+  categoryContainer: {
+    paddingHorizontal: 5,
+    alignItems: 'center',
+  },
+  categoryChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: 5,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
+  categoryChipActive: {
+    backgroundColor: '#4A4A4A',
+    borderColor: '#4A4A4A',
+  },
+  categoryChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#4A4A4A',
+  },
+  categoryChipTextActive: {
+    color: '#D8C9AE',
+    fontWeight: '600',
   },
   addItem: {
     fontSize: 14,
@@ -191,6 +285,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 10,
     borderRadius: 15,
+    alignSelf: 'flex-end',
+    marginTop: 5,
+    marginRight: 10,
   },
   card: {
     backgroundColor: '#FFF',

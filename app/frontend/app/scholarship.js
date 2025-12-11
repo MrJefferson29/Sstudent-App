@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useContext, useCallback } from "react";
 import { Linking, Alert } from 'react-native';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  Image,
-  ScrollView,
-  ActivityIndicator,
-  RefreshControl,
-  Dimensions,
-  StatusBar,
-  Platform,
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  Image,
+  ScrollView,
+  ActivityIndicator,
+  RefreshControl,
+  Dimensions,
+  StatusBar,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -118,7 +118,7 @@ export default function ScholarshipsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const fetchScholarships = useCallback(async (isRefreshing = false) => {
-    try {
+    try {
       if (backendScholarships.length === 0 && !isRefreshing) {
         setLoading(true);
       }
@@ -138,8 +138,8 @@ export default function ScholarshipsScreen() {
       }
 
       // Fetch from network
-      const response = await scholarshipsAPI.getAll();
-      if (response.success) {
+      const response = await scholarshipsAPI.getAll();
+      if (response.success) {
         const data = response.data || [];
         setBackendScholarships(data);
         // Cache the data
@@ -148,11 +148,11 @@ export default function ScholarshipsScreen() {
         } catch (e) {
           console.log('Error caching scholarships:', e);
         }
-      } else {
-        setBackendScholarships([]);
-      }
-    } catch (err) {
-      console.error("Error fetching scholarships:", err);
+      } else {
+        setBackendScholarships([]);
+      }
+    } catch (err) {
+      console.error("Error fetching scholarships:", err);
       // If network fails, try to use cached data
       if (backendScholarships.length === 0) {
         try {
@@ -167,11 +167,11 @@ export default function ScholarshipsScreen() {
           // Ignore cache read errors
         }
       }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [backendScholarships.length]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [backendScholarships.length]);
 
   useEffect(() => {
     fetchScholarships();
@@ -179,10 +179,10 @@ export default function ScholarshipsScreen() {
 
   const allScholarships = [...backendScholarships, ...dummyScholarships];
 
-  const onRefresh = () => {
-    setRefreshing(true);
+  const onRefresh = () => {
+    setRefreshing(true);
     fetchScholarships(true);
-  };
+  };
 
   const handleScholarshipPress = (scholarship) => {
     if (scholarship.websiteLink) {

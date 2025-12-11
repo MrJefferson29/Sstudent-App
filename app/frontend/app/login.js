@@ -17,7 +17,7 @@ export default function Login() {
     // Redirect if already authenticated
     useEffect(() => {
         if (!isLoading && userToken) {
-            router.replace('/( tabs )/index');
+            router.replace('/');
         }
     }, [userToken, isLoading]);
 
@@ -44,7 +44,7 @@ export default function Login() {
             const needsProfileCompletion = !response.data.user.profileCompleted;
             const targetRoute = needsProfileCompletion 
               ? '/profile-completion' 
-              : '/( tabs )/index';
+              : '/';
             
             // Navigate after state update
             setTimeout(() => {

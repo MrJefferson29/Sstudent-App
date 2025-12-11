@@ -23,6 +23,7 @@ import { io } from 'socket.io-client';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../Contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
@@ -69,20 +70,22 @@ const MessageBubble = React.memo(({ msg, myUsername, colors }) => {
                 backgroundColor: colors.chatUser,
                 borderTopLeftRadius: 18,
                 borderTopRightRadius: 18,
-                borderBottomLeftRadius: 18,
-                borderBottomRightRadius: 4,
+                borderBottomLeftRadius: 4,
+                borderBottomRightRadius: 18,
               }
             : {
                 backgroundColor: colors.chatBot,
-                borderTopLeftRadius: 18,
+                borderTopLeftRadius: 4,
                 borderTopRightRadius: 18,
-                borderBottomLeftRadius: 4,
+                borderBottomLeftRadius: 18,
                 borderBottomRightRadius: 18,
               },
         ]}
       >
         {!isMyMessage && (
-          <Text style={[styles.user, { color: colors.primary }]}>{senderName}</Text>
+          <Text style={[styles.user, { color: colors.primary }]} numberOfLines={1}>
+            {senderName}
+          </Text>
         )}
 
         <Text style={[styles.bubbleText, { color: isMyMessage ? '#fff' : colors.textPrimary }]}>
@@ -94,8 +97,7 @@ const MessageBubble = React.memo(({ msg, myUsername, colors }) => {
             style={[
               styles.bubbleTime,
               {
-                color: isMyMessage ? 'rgba(255,255,255,0.7)' : colors.textSecondary,
-                textAlign: isMyMessage ? 'right' : 'left',
+                color: isMyMessage ? 'rgba(255,255,255,0.8)' : colors.textSecondary,
               },
             ]}
           >
@@ -154,24 +156,70 @@ export default function StudyGroupsScreen() {
         const groupId = groupRes.data.groupId;
         groupIdRef.current = groupId;
 
-        // fetch messages
-        const msgsRes = await axios.get(`${API_URL}/study-groups/${groupId}/messages?limit=50`);
-        const fetchedMessages = msgsRes.data.messages || [];
-        if (mounted) {
-          activeMembersRef.current = new Set(
-            fetchedMessages.map((item) => (item.user || item.username)).filter(Boolean)
-          );
-          setActiveMembers(Math.max(1, activeMembersRef.current.size));
-          // ensure timestamps exist
-          setMessages(
-            fetchedMessages.map((m) => ({ ...m, timestamp: m.timestamp || new Date().toISOString() }))
-          );
-          setLoading(false);
+        const cacheKey = `studyGroupMessages_${groupId}`;
+        let hasCachedData = false;
 
-          // Scroll to bottom after a small delay
-          setTimeout(() => {
-            tryScrollToEnd();
-          }, 250);
+        // Try to load from cache first for instant display
+        try {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached && mounted) {
+            const parsed = JSON.parse(cached);
+            if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+              hasCachedData = true;
+              activeMembersRef.current = new Set(
+                parsed.map((item) => (item.user || item.username)).filter(Boolean)
+              );
+              setActiveMembers(Math.max(1, activeMembersRef.current.size));
+              setMessages(
+                parsed.map((m) => ({ ...m, timestamp: m.timestamp || new Date().toISOString() }))
+              );
+              setLoading(false);
+              
+              // Scroll to bottom after loading cached data
+              setTimeout(() => {
+                tryScrollToEnd();
+              }, 100);
+            }
+          }
+        } catch (e) {
+          console.log('Error reading cached messages:', e);
+        }
+
+        // fetch messages from network
+        try {
+          const msgsRes = await axios.get(`${API_URL}/study-groups/${groupId}/messages?limit=50`);
+          const fetchedMessages = msgsRes.data.messages || [];
+          if (mounted) {
+            activeMembersRef.current = new Set(
+              fetchedMessages.map((item) => (item.user || item.username)).filter(Boolean)
+            );
+            setActiveMembers(Math.max(1, activeMembersRef.current.size));
+            // ensure timestamps exist
+            const messagesWithTimestamps = fetchedMessages.map((m) => ({ 
+              ...m, 
+              timestamp: m.timestamp || new Date().toISOString() 
+            }));
+            setMessages(messagesWithTimestamps);
+            setLoading(false);
+
+            // Cache the messages
+            try {
+              await AsyncStorage.setItem(cacheKey, JSON.stringify(messagesWithTimestamps));
+            } catch (e) {
+              console.log('Error caching messages:', e);
+            }
+
+            // Scroll to bottom after a small delay
+            setTimeout(() => {
+              tryScrollToEnd();
+            }, 250);
+          }
+        } catch (err) {
+          console.error('Failed to fetch messages:', err);
+          // If network fails and we don't have cached data, show empty state
+          if (mounted && !hasCachedData) {
+            setLoading(false);
+          }
         }
 
         // connect socket
@@ -189,7 +237,7 @@ export default function StudyGroupsScreen() {
           socket.emit('join', { groupId, username: usernameRef.current });
         });
 
-        socket.on('message', (payload) => {
+        socket.on('message', async (payload) => {
           const finalPayload = {
             ...payload,
             user: payload.user || payload.username,
@@ -205,7 +253,15 @@ export default function StudyGroupsScreen() {
           }
 
           // optimistic update from server
-          setMessages((prev) => [...prev, finalPayload]);
+          setMessages((prev) => {
+            const updated = [...prev, finalPayload];
+            // Cache updated messages
+            const cacheKey = `studyGroupMessages_${groupId}`;
+            AsyncStorage.setItem(cacheKey, JSON.stringify(updated)).catch((e) => {
+              console.log('Error caching new message:', e);
+            });
+            return updated;
+          });
           // quick fade (re-trigger)
           fadeAnim.setValue(0);
           Animated.timing(fadeAnim, { toValue: 1, duration: 280, useNativeDriver: true, easing: Easing.ease }).start();
@@ -265,7 +321,7 @@ export default function StudyGroupsScreen() {
     }
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const text = inputText.trim();
     if (!text || !groupIdRef.current) return;
     const socket = socketRef.current;
@@ -286,7 +342,15 @@ export default function StudyGroupsScreen() {
       timestamp,
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => {
+      const updated = [...prev, userMsg];
+      // Cache updated messages
+      const cacheKey = `studyGroupMessages_${groupIdRef.current}`;
+      AsyncStorage.setItem(cacheKey, JSON.stringify(updated)).catch((e) => {
+        console.log('Error caching sent message:', e);
+      });
+      return updated;
+    });
     setInputText('');
     tryScrollToEnd();
 
@@ -324,7 +388,7 @@ export default function StudyGroupsScreen() {
         <LinearGradient colors={colors.gradientPrimary} style={[styles.header, { paddingTop: insets.top + 12 }]}>
           <TouchableOpacity 
             style={[styles.backButton, { backgroundColor: 'rgba(255,255,255,0.12)' }]} 
-            onPress={() => router.push('/( tabs )/profile')}
+            onPress={() => router.push('/profile')}
             activeOpacity={0.7}
           >
             <Ionicons name="settings-outline" size={22} color="#fff" />
@@ -339,7 +403,7 @@ export default function StudyGroupsScreen() {
 
           <TouchableOpacity 
             style={[styles.fab, { backgroundColor: colors.accent }]} 
-            onPress={() => router.push('/( tabs )/profile')}
+            onPress={() => router.push('/profile')}
             activeOpacity={0.7}
           >
             <MaterialCommunityIcons name="account-group" size={20} color="#fff" />
@@ -517,7 +581,7 @@ const styles = StyleSheet.create({
   // Bubble wrapper for proper alignment
   bubbleWrapper: {
     width: '100%',
-    marginVertical: 4,
+    marginVertical: 2,
     paddingHorizontal: 12,
   },
   bubbleWrapperLeft: {
@@ -528,31 +592,34 @@ const styles = StyleSheet.create({
   },
   // Bubble
   bubble: {
-    maxWidth: '78%',
-    padding: 14,
+    maxWidth: '75%',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   user: {
-    fontWeight: '700',
-    marginBottom: 6,
-    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 4,
+    fontSize: 12,
+    letterSpacing: 0.2,
   },
   bubbleText: {
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: 20,
   },
   bubbleFooter: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'center',
-    marginTop: 6,
+    marginTop: 4,
   },
   bubbleTime: {
-    fontSize: 10,
-    marginTop: 4,
+    fontSize: 11,
+    opacity: 0.7,
   },
 
   typingIndicator: {

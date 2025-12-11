@@ -54,21 +54,62 @@ const uploadBuffer = async (buffer, options = {}) => {
     contentType = 'application/pdf',
   } = options;
 
-  // Generate unique filename
-  const fileExtension = contentType.split('/')[1] || 'pdf';
-  const uniqueFilename = filename || `${uuidv4()}.${fileExtension}`;
+  // Always generate unique filename to avoid conflicts
+  // If original filename is provided, extract extension and use it with UUID
+  let fileExtension = contentType.split('/')[1] || 'pdf';
+  if (filename) {
+    // Extract extension from original filename if available
+    const originalExt = filename.split('.').pop();
+    if (originalExt && originalExt.length <= 5) {
+      fileExtension = originalExt.toLowerCase();
+    }
+  }
+  
+  // Always use UUID to ensure uniqueness, even if filename is provided
+  const uniqueFilename = `${uuidv4()}.${fileExtension}`;
   const filePath = `${folder}/${uniqueFilename}`;
 
   try {
-    // Upload file
+    // Upload file with upsert enabled to handle any edge cases
     const { data, error } = await supabase.storage
       .from('pdfs') // Bucket name - you'll create this in Supabase
       .upload(filePath, buffer, {
         contentType,
-        upsert: false, // Don't overwrite existing files
+        upsert: true, // Allow overwriting (shouldn't happen with UUID, but safe fallback)
       });
 
     if (error) {
+      // If we get a conflict error (409), try again with a new UUID
+      if (error.statusCode === '409' || error.status === 409 || error.message?.includes('already exists')) {
+        console.warn('[Supabase] File conflict detected, retrying with new UUID...');
+        const retryFilename = `${uuidv4()}.${fileExtension}`;
+        const retryPath = `${folder}/${retryFilename}`;
+        
+        const { data: retryData, error: retryError } = await supabase.storage
+          .from('pdfs')
+          .upload(retryPath, buffer, {
+            contentType,
+            upsert: true,
+          });
+        
+        if (retryError) {
+          throw retryError;
+        }
+        
+        // Use retry data
+        const { data: urlData } = supabase.storage
+          .from('pdfs')
+          .getPublicUrl(retryPath);
+        
+        return {
+          public_id: retryPath,
+          secure_url: urlData.publicUrl,
+          public_url: urlData.publicUrl,
+          url: urlData.publicUrl,
+          folder,
+          filename: retryFilename,
+        };
+      }
       throw error;
     }
 

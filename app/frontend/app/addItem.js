@@ -1,10 +1,30 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ScrollView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ScrollView, Platform, Modal, FlatList } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { AuthContext } from './Contexts/AuthContext'; // Assuming this path is correct
+
+// Category list
+const CATEGORIES = [
+  'Electronics',
+  'Furniture',
+  'Books',
+  'Clothing & Accessories',
+  'Sports & Outdoors',
+  'Home & Kitchen',
+  'Beauty & Personal Care',
+  'Toys & Games',
+  'Automotive',
+  'Health & Fitness',
+  'Musical Instruments',
+  'Art & Collectibles',
+  'Office Supplies',
+  'Pet Supplies',
+  'Baby & Kids',
+  'Other'
+];
 
 // --- Design Tokens ---
 const PRIMARY_COLOR = '#4F46E5'; // Indigo
@@ -20,6 +40,7 @@ export default function AddItem() {
   const [category, setCategory] = useState('');
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false); // New state for loading/submit feedback
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const { userToken } = useContext(AuthContext);
   const router = useRouter();
 
@@ -148,13 +169,64 @@ export default function AddItem() {
         />
 
         <Text style={styles.label}>Category **(Required)**</Text>
-        <TextInput 
-          style={styles.input} 
-          value={category} 
-          onChangeText={setCategory} 
-          placeholder="e.g., Electronics, Furniture, Books" 
-          placeholderTextColor="#9CA3AF"
-        />
+        <TouchableOpacity 
+          style={styles.categoryButton}
+          onPress={() => setShowCategoryModal(true)}
+          disabled={loading}
+        >
+          <Text style={[styles.categoryButtonText, !category && styles.categoryPlaceholder]}>
+            {category || 'Select a category'}
+          </Text>
+          <Ionicons name="chevron-down" size={20} color={category ? TEXT_COLOR : '#9CA3AF'} />
+        </TouchableOpacity>
+
+        {/* Category Modal */}
+        <Modal
+          visible={showCategoryModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowCategoryModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Category</Text>
+                <TouchableOpacity 
+                  onPress={() => setShowCategoryModal(false)}
+                  style={styles.modalCloseButton}
+                >
+                  <Ionicons name="close" size={24} color={TEXT_COLOR} />
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={CATEGORIES}
+                keyExtractor={(item) => item}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.categoryItem,
+                      category === item && styles.categoryItemSelected
+                    ]}
+                    onPress={() => {
+                      setCategory(item);
+                      setShowCategoryModal(false);
+                    }}
+                  >
+                    <Text style={[
+                      styles.categoryItemText,
+                      category === item && styles.categoryItemTextSelected
+                    ]}>
+                      {item}
+                    </Text>
+                    {category === item && (
+                      <Ionicons name="checkmark-circle" size={20} color={PRIMARY_COLOR} />
+                    )}
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          </View>
+        </Modal>
 
         <Text style={styles.label}>Description (Optional)</Text>
         <TextInput
@@ -352,5 +424,73 @@ const styles = StyleSheet.create({
   spinner: {
     marginLeft: 10,
     transform: [{ rotate: '45deg' }], // Simple loading indicator
-  }
+  },
+  // Category Dropdown Styles
+  categoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F9FAFB',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER_COLOR,
+  },
+  categoryButtonText: {
+    fontSize: 16,
+    color: TEXT_COLOR,
+    flex: 1,
+  },
+  categoryPlaceholder: {
+    color: '#9CA3AF',
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: CARD_COLOR,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '70%',
+    paddingBottom: Platform.OS === 'ios' ? 20 : 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER_COLOR,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: TEXT_COLOR,
+  },
+  modalCloseButton: {
+    padding: 5,
+  },
+  categoryItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER_COLOR,
+  },
+  categoryItemSelected: {
+    backgroundColor: '#EEF2FF',
+  },
+  categoryItemText: {
+    fontSize: 16,
+    color: TEXT_COLOR,
+  },
+  categoryItemTextSelected: {
+    color: PRIMARY_COLOR,
+    fontWeight: '600',
+  },
 });
