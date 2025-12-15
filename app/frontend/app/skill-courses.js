@@ -3,7 +3,6 @@ import {
   View,
   Text,
   FlatList,
-  ActivityIndicator,
   StyleSheet,
   Alert,
   TouchableOpacity,
@@ -20,10 +19,41 @@ import { AuthContext } from "./Contexts/AuthContext";
 import { resolveAssetUrl } from "./utils/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+const DUMMY_SKILLS = [
+  {
+    _id: "placeholder-1",
+    name: "Frontend Fundamentals",
+    category: "Web",
+    description: "HTML, CSS, and responsive UI basics.",
+    thumbnail: { url: "https://via.placeholder.com/400x220?text=Frontend" },
+  },
+  {
+    _id: "placeholder-2",
+    name: "Backend Basics",
+    category: "API",
+    description: "REST, authentication, and databases.",
+    thumbnail: { url: "https://via.placeholder.com/400x220?text=Backend" },
+  },
+  {
+    _id: "placeholder-3",
+    name: "Mobile Essentials",
+    category: "Mobile",
+    description: "React Native layouts and navigation.",
+    thumbnail: { url: "https://via.placeholder.com/400x220?text=Mobile" },
+  },
+  {
+    _id: "placeholder-4",
+    name: "Data & AI",
+    category: "AI",
+    description: "Intro to data pipelines and ML.",
+    thumbnail: { url: "https://via.placeholder.com/400x220?text=Data+AI" },
+  },
+];
+
 const Skills = () => {
   const { userToken, userEmail } = useContext(AuthContext);
   
-  const [skills, setSkills] = useState([]);
+  const [skills, setSkills] = useState(DUMMY_SKILLS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -70,6 +100,9 @@ const Skills = () => {
   const fetchSkills = async (isRefreshing = false, isMountedFlag = true) => {
     try {
       if (!isRefreshing) {
+        setLoading(true);
+      } else {
+        // keep showing placeholders during pull-to-refresh too
         setLoading(true);
       }
       setError(null);
@@ -176,11 +209,6 @@ const Skills = () => {
     );
   };
 
-  if (loading) {
-    // Replaced <Loading /> with existing ActivityIndicator
-    return <ActivityIndicator size="large" color={theme.primary} style={styles.center} />;
-  }
-
   if (error) {
     return (
       <View style={styles.center}>
@@ -188,6 +216,11 @@ const Skills = () => {
       </View>
     );
   }
+
+  const dataToRender =
+    (loading && (!skills || skills.length === 0)) ? DUMMY_SKILLS
+    : (!loading && (!skills || skills.length === 0)) ? DUMMY_SKILLS
+    : skills;
 
   return (
     <DrawerWithHeader>
@@ -213,7 +246,7 @@ const Skills = () => {
 
         {/* Skills List with pull-to-refresh */}
         <FlatList
-          data={skills}
+          data={dataToRender}
           keyExtractor={(item) => item._id}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           renderItem={({ item }) => (

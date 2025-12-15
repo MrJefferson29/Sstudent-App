@@ -337,12 +337,24 @@ export const skillsAPI = {
   getAll: async (category = null) => {
     const params = new URLSearchParams();
     if (category) params.append('category', category);
-    const response = await api.get(`/skills?${params.toString()}`);
+    const response = await api.get(`https://ficedu-payment.onrender.com/skills?${params.toString()}`);
     return response.data;
   },
 
   getById: async (skillId) => {
-    const response = await api.get(`/skills/${skillId}`);
+    const response = await api.get(`https://ficedu-payment.onrender.com/skills/${skillId}`);
+    return response.data;
+  },
+};
+
+export const skillChaptersAPI = {
+  getBySkill: async (skillId) => {
+    const response = await api.get(`https://ficedu-payment.onrender.com/skill-chapters/skill/${skillId}`);
+    return response.data;
+  },
+
+  getById: async (chapterId) => {
+    const response = await api.get(`https://ficedu-payment.onrender.com/skill-chapters/${chapterId}`);
     return response.data;
   },
 };
